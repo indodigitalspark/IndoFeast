@@ -93,6 +93,66 @@ Local integration notes:
 - `npm run dev` uses plain `node src/server.js` for a more stable local setup. If you explicitly want file watching, use `npm run dev:watch`.
 - If MongoDB Atlas is unreachable, the backend starts in demo mode so frontend login and admin UI can still boot locally.
 
+## Deploy on Vercel
+
+This project is best deployed to Vercel as two separate projects:
+
+1. Frontend project
+   Root directory: repository root
+2. Backend project
+   Root directory: `backend`
+
+### Frontend on Vercel
+
+The repository now includes a root [vercel.json](vercel.json) and a build script at [scripts/vercel-build-frontend.sh](scripts/vercel-build-frontend.sh).
+
+Required Vercel environment variable:
+
+```bash
+API_BASE_URL=https://your-backend-domain.vercel.app/api
+```
+
+Frontend notes:
+
+- The build step installs Flutter in the Vercel build environment, runs `flutter pub get`, and builds `build/web`.
+- SPA routing is handled with a Vercel rewrite to `index.html`.
+
+### Backend on Vercel
+
+Set the Vercel project root directory to `backend/`.
+
+The backend now exposes [backend/src/index.js](backend/src/index.js), which exports the Express app in a Vercel-friendly format.
+
+Required backend environment variables:
+
+```bash
+MONGODB_URI=...
+JWT_SECRET=...
+CLIENT_ORIGIN=https://your-frontend-domain.vercel.app
+DEFAULT_ADMIN_EMAIL=...
+DEFAULT_ADMIN_PASSWORD=...
+DEFAULT_ADMIN_NAME=...
+```
+
+Optional payment variables:
+
+```bash
+RAZORPAY_KEY_ID=...
+RAZORPAY_KEY_SECRET=...
+CASHFREE_CLIENT_ID=...
+CASHFREE_CLIENT_SECRET=...
+CASHFREE_API_VERSION=...
+CASHFREE_BASE_URL=...
+STRIPE_SECRET_KEY=...
+STRIPE_PUBLISHABLE_KEY=...
+```
+
+Important backend limitation on Vercel:
+
+- Uploaded files stored on local disk are not durable on serverless infrastructure.
+- This app currently writes uploads to `backend/uploads/`.
+- For production, move uploads to persistent storage such as S3, Cloudinary, or Vercel Blob.
+
 Troubleshooting:
 
 - If the browser shows `POST http://localhost:4000/api/auth/login net::ERR_CONNECTION_REFUSED`, nothing is listening on port `4000`. Start the backend first with `cd backend && npm run dev`.

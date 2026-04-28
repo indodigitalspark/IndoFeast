@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo \"Skipping default install; Flutter is installed in build step.\"",
+  "buildCommand": "bash scripts/vercel-build-frontend.sh",
+  "outputDirectory": "build/web",
+  "cleanUrls": true,
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
