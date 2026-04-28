@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="120" fill="#E8621A"/>
+  <rect x="18" y="18" width="476" height="476" rx="104" fill="#F07830"/>
+
+  <!-- Top accent -->
+  <rect x="156" y="148" width="200" height="3" rx="1.5" fill="#FFFFFF" opacity="0.5"/>
+
+  <!-- INDO text -->
+  <text x="256" y="242"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="112"
+    font-weight="700"
+    fill="#FFFFFF"
+    letter-spacing="-4">Indo</text>
+
+  <!-- Divider -->
+  <rect x="136" y="262" width="240" height="2" rx="1" fill="#FFFFFF" opacity="0.35"/>
+
+  <!-- FEAST text -->
+  <text x="256" y="362"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="112"
+    font-weight="700"
+    fill="#1C0A00"
+    letter-spacing="-4">Feast</text>
+
+  <!-- Bottom accent -->
+  <rect x="156" y="378" width="200" height="3" rx="1.5" fill="#FFFFFF" opacity="0.5"/>
+</svg>

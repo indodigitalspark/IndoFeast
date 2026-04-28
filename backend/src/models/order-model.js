@@ -1,0 +1,111 @@
+import mongoose from 'mongoose';
+
+const orderItemSchema = new mongoose.Schema(
+  {
+    menuItemId: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    price: { type: Number, required: true },
+    quantity: { type: Number, required: true, min: 1 },
+  },
+  { _id: false },
+);
+
+const orderSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
+    restaurantName: { type: String, required: true, trim: true },
+    items: { type: [orderItemSchema], default: [] },
+    paymentMethod: {
+      type: String,
+      enum: ['COD', 'WALLET', 'RAZORPAY', 'CASHFREE', 'STRIPE'],
+      default: 'COD',
+    },
+    paymentStatus: {
+      type: String,
+      enum: [
+        'PENDING',
+        'PAID',
+        'PENDING_COD_COLLECTION',
+        'FAILED',
+        'REFUNDED',
+        'PARTIALLY_REFUNDED',
+      ],
+      default: 'PENDING',
+    },
+    paymentProviderOrderId: { type: String, trim: true },
+    paymentReferenceId: { type: String, trim: true },
+    paymentClientSecret: { type: String, trim: true },
+    paymentSessionId: { type: String, trim: true },
+    paymentVerifiedAt: { type: Date },
+    refundedAmount: { type: Number, default: 0 },
+    orderMode: {
+      type: String,
+      enum: ['DELIVERY', 'PICKUP', 'DINE_IN'],
+      required: true,
+      default: 'DELIVERY',
+    },
+    couponCode: { type: String, trim: true },
+    discount: { type: Number, default: 0 },
+    subtotal: { type: Number, required: true },
+    total: { type: Number, required: true },
+    customerName: { type: String, trim: true },
+    customerPhoneNumber: { type: String, trim: true },
+    pickupAddress: { type: String, trim: true },
+    pickupLatitude: { type: Number },
+    pickupLongitude: { type: Number },
+    deliveryAddress: { type: String, trim: true },
+    deliveryLatitude: { type: Number },
+    deliveryLongitude: { type: Number },
+    deliveryOtp: { type: String, trim: true },
+    deliveryPartnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deliveryPartnerName: { type: String, trim: true },
+    deliveryPartnerLatitude: { type: Number },
+    deliveryPartnerLongitude: { type: Number },
+    locationUpdatedAt: { type: Date },
+    deliveryAcceptedAt: { type: Date },
+    assignedAt: { type: Date },
+    pickupConfirmedAt: { type: Date },
+    deliveredAt: { type: Date },
+    cancelledAt: { type: Date },
+    cancellationReason: { type: String, trim: true },
+    commissionAmount: { type: Number, default: 0 },
+    vendorSettlementAmount: { type: Number, default: 0 },
+    deliveryPartnerPayoutAmount: { type: Number, default: 0 },
+    settlementStatus: {
+      type: String,
+      enum: ['PENDING', 'SETTLED', 'REVERSED'],
+      default: 'PENDING',
+    },
+    status: {
+      type: String,
+      enum: [
+        'PLACED',
+        'ACCEPTED',
+        'PREPARING',
+        'OUT_FOR_DELIVERY',
+        'DELIVERED',
+        'CANCELLED',
+      ],
+      default: 'PLACED',
+    },
+    review: {
+      rating: { type: Number },
+      comment: { type: String, trim: true },
+      createdAt: { type: Date },
+    },
+    refunds: [
+      {
+        refundId: { type: String, trim: true },
+        providerRefundId: { type: String, trim: true },
+        amount: { type: Number, default: 0 },
+        status: { type: String, trim: true, default: 'SUCCESS' },
+        reason: { type: String, trim: true },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+  },
+  { timestamps: true },
+);
+
+export const OrderModel = mongoose.model('Order', orderSchema);

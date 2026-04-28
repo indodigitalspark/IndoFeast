@@ -1,0 +1,175 @@
+import { CouponModel } from '../models/coupon-model.js';
+import { RestaurantModel } from '../models/restaurant-model.js';
+
+const restaurantSeeds = [
+  {
+    name: 'Saffron Street Kitchen',
+    cuisine: ['North Indian', 'Biryani', 'Kebabs'],
+    category: 'Biryani',
+    rating: 4.6,
+    deliveryTime: 28,
+    priceLevel: 'Rs 350 for two',
+    offerText: 'Flat 25% off up to Rs 120',
+    description: 'Slow-cooked biryanis, smoky kebabs, and late-night cravings sorted.',
+    accentColor: '#FFEDD8',
+    heroTag: 'BESTSELLER',
+    menuItems: [
+      {
+        itemId: 'ssf-biryani',
+        name: 'Royal Chicken Biryani',
+        description: 'Fragrant basmati, saffron milk, and slow-cooked chicken.',
+        price: 289,
+        category: 'Non-Veg',
+        stock: 24,
+        isAvailable: true,
+        imagePath: 'backend/uploads/demo-royal-chicken-biryani.jpg',
+        bestseller: true,
+        discountPercent: 20,
+        preparationTimeMin: 25,
+        preparationTimeMax: 30,
+        addOns: ['Boiled egg', 'Raita'],
+        customizationOptions: ['Extra spice', 'Less oil'],
+      },
+      {
+        itemId: 'ssf-paneer',
+        name: 'Paneer Tikka Bowl',
+        description: 'Charred paneer cubes, mint yogurt, and pickled onions.',
+        price: 249,
+        category: 'Veg',
+        stock: 18,
+        isAvailable: true,
+        imagePath: 'backend/uploads/demo-paneer-tikka-bowl.jpg',
+        isVeg: true,
+        discountPercent: 10,
+        preparationTimeMin: 20,
+        preparationTimeMax: 25,
+        addOns: ['Extra paneer', 'Mint dip'],
+        customizationOptions: ['Mild spice', 'Medium spice', 'Extra spicy'],
+      },
+    ],
+  },
+  {
+    name: 'Curry Junction',
+    cuisine: ['South Indian', 'Meals', 'Combo'],
+    category: 'Meals',
+    rating: 4.4,
+    deliveryTime: 22,
+    priceLevel: 'Rs 250 for two',
+    offerText: 'Free dessert on combos',
+    description: 'Comfort meals, mini tiffins, and rice bowls for busy afternoons.',
+    accentColor: '#E8F4EA',
+    heroTag: 'FAST DELIVERY',
+    menuItems: [
+      {
+        itemId: 'cj-thali',
+        name: 'Executive Veg Thali',
+        description: 'Dal, sabzi, rice, roti, salad, and sweet.',
+        price: 199,
+        category: 'Veg',
+        stock: 30,
+        isAvailable: true,
+        imagePath: 'backend/uploads/demo-executive-veg-thali.jpg',
+        isVeg: true,
+        bestseller: true,
+        discountPercent: 15,
+        preparationTimeMin: 18,
+        preparationTimeMax: 22,
+        addOns: ['Sweet upgrade', 'Extra roti'],
+        customizationOptions: ['Jain option', 'No onion'],
+      },
+      {
+        itemId: 'cj-fry',
+        name: 'Pepper Chicken Fry Rice',
+        description: 'Spicy wok-tossed rice with pepper chicken bites.',
+        price: 239,
+        category: 'Non-Veg',
+        stock: 16,
+        isAvailable: true,
+        imagePath: 'backend/uploads/demo-pepper-chicken-fry-rice.jpg',
+        discountPercent: 0,
+        preparationTimeMin: 20,
+        preparationTimeMax: 25,
+        addOns: ['Fried egg', 'Extra chicken'],
+        customizationOptions: ['Low spice', 'Medium spice', 'High spice'],
+      },
+    ],
+  },
+  {
+    name: 'Chaat Republic',
+    cuisine: ['Street Food', 'Snacks', 'Desserts'],
+    category: 'Snacks',
+    rating: 4.7,
+    deliveryTime: 18,
+    priceLevel: 'Rs 180 for two',
+    offerText: 'Buy 1 Get 1 on chaats',
+    description: 'Tangy chaats, crunchy bites, and indulgent sweet finishes.',
+    accentColor: '#FFF3D6',
+    heroTag: 'TRENDING',
+    menuItems: [
+      {
+        itemId: 'cr-papdi',
+        name: 'Delhi Papdi Chaat',
+        description: 'Crisp papdi with curd, chutneys, and sev.',
+        price: 129,
+        category: 'Veg',
+        stock: 22,
+        isAvailable: true,
+        imagePath: 'backend/uploads/demo-delhi-papdi-chaat.jpg',
+        isVeg: true,
+        bestseller: true,
+        discountPercent: 12,
+        preparationTimeMin: 10,
+        preparationTimeMax: 15,
+        addOns: ['Extra dahi', 'Pomegranate'],
+        customizationOptions: ['Sweet chutney more', 'Spicy chutney more'],
+      },
+      {
+        itemId: 'cr-jalebi',
+        name: 'Rabri Jalebi Box',
+        description: 'Hot jalebis with saffron rabri.',
+        price: 149,
+        category: 'Dessert',
+        stock: 14,
+        isAvailable: true,
+        imagePath: 'backend/uploads/demo-rabri-jalebi-box.jpg',
+        isVeg: true,
+        discountPercent: 8,
+        preparationTimeMin: 12,
+        preparationTimeMax: 18,
+        addOns: ['Extra rabri'],
+        customizationOptions: ['Serve warm', 'Less sweet'],
+      },
+    ],
+  },
+];
+
+const couponSeeds = [
+  {
+    code: 'FEAST50',
+    title: 'Save Rs 50',
+    description: 'Flat Rs 50 off on orders above Rs 299.',
+    discountType: 'FIXED',
+    discountValue: 50,
+    minOrderValue: 299,
+  },
+  {
+    code: 'INDOFEASTSTYLE',
+    title: '15% off',
+    description: 'Get 15% off on orders above Rs 199.',
+    discountType: 'PERCENTAGE',
+    discountValue: 15,
+    minOrderValue: 199,
+  },
+];
+
+export async function ensureCustomerCatalog() {
+  const restaurantCount = await RestaurantModel.countDocuments();
+  if (restaurantCount === 0) {
+    await RestaurantModel.insertMany(restaurantSeeds);
+  }
+
+  const couponCount = await CouponModel.countDocuments();
+  if (couponCount === 0) {
+    await CouponModel.insertMany(couponSeeds);
+  }
+}

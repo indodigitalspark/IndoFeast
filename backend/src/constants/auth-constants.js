@@ -1,0 +1,12 @@
+export const USER_ROLES = [
+  'SUPER_ADMIN',
+  'ADMIN',
+  'MANAGER',
+  'VENDOR',
+  'DELIVERY_PARTNER',
+  'CUSTOMER',
+];
+
+export const ACCOUNT_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'];
+
+export const ADMIN_FAMILY = ['SUPER_ADMIN', 'ADMIN', 'MANAGER'];

@@ -1,0 +1,424 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userExists() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userData() {
+      return userDoc().data;
+    }
+
+    function userRole() {
+      return userExists() ? userData().role : null;
+    }
+
+    function userStatus() {
+      return userExists() ? userData().status : null;
+    }
+
+    function isApproved() {
+      return userStatus() == 'APPROVED';
+    }
+
+    function isSuperAdmin() {
+      return userRole() == 'SUPER_ADMIN';
+    }
+
+    function isAdmin() {
+      return userRole() == 'ADMIN';
+    }
+
+    function isManager() {
+      return userRole() == 'MANAGER';
+    }
+
+    function isAdminFamily() {
+      return isSuperAdmin() || isAdmin() || isManager();
+    }
+
+    function isVendor() {
+      return userRole() == 'VENDOR';
+    }
+
+    function isDeliveryPartner() {
+      return userRole() == 'DELIVERY_PARTNER';
+    }
+
+    function isCustomer() {
+      return userRole() == 'CUSTOMER';
+    }
+
+    function hasPermission(permission) {
+      return userExists() &&
+        userData().permissions is list &&
+        userData().permissions.hasAny([permission]);
+    }
+
+    function timestampField(value) {
+      return value is timestamp;
+    }
+
+    function stringField(value) {
+      return value is string && value.size() > 0;
+    }
+
+    function numberField(value) {
+      return value is int || value is float;
+    }
+
+    function requireBaseFieldsOnCreate(docId) {
+      return request.resource.data.keys().hasAll(['id', 'createdAt', 'updatedAt']) &&
+        request.resource.data.id == docId &&
+        timestampField(request.resource.data.createdAt) &&
+        timestampField(request.resource.data.updatedAt);
+    }
+
+    function requireBaseFieldsOnUpdate(docId) {
+      return request.resource.data.keys().hasAll(['id', 'createdAt', 'updatedAt']) &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.id == docId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        timestampField(request.resource.data.updatedAt);
+    }
+
+    function userCanEditOwnProfile() {
+      return isSignedIn() &&
+        request.auth.uid == resource.id &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.permissions == resource.data.permissions &&
+        request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function isRequestOwner(field) {
+      return isSignedIn() && request.resource.data[field] == request.auth.uid;
+    }
+
+    function orderDoc(orderId) {
+      return get(/databases/$(database)/documents/orders/$(orderId));
+    }
+
+    function orderExists(orderId) {
+      return exists(/databases/$(database)/documents/orders/$(orderId));
+    }
+
+    function canReadOrder(orderId) {
+      return isAdminFamily() ||
+        (orderExists(orderId) && (
+          orderDoc(orderId).data.customerId == request.auth.uid ||
+          orderDoc(orderId).data.vendorId == request.auth.uid ||
+          orderDoc(orderId).data.deliveryPartnerId == request.auth.uid
+        ));
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdminFamily());
+
+      allow create: if isSignedIn() &&
+        request.auth.uid == userId &&
+        requireBaseFieldsOnCreate(userId) &&
+        stringField(request.resource.data.email) &&
+        stringField(request.resource.data.displayName) &&
+        stringField(request.resource.data.phoneNumber) &&
+        request.resource.data.status == 'PENDING' &&
+        request.resource.data.permissions is list &&
+        request.resource.data.role in ['CUSTOMER', 'VENDOR', 'DELIVERY_PARTNER'];
+
+      allow update: if isSignedIn() && requireBaseFieldsOnUpdate(userId) && (
+        userCanEditOwnProfile() ||
+        isAdminFamily()
+      );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /vendors/{vendorId} {
+      allow read: if (
+        isSignedIn() &&
+        isAdminFamily()
+      ) || (
+        resource.data.status == 'ACTIVE' &&
+        resource.data.isPublished == true
+      ) || (
+        isSignedIn() &&
+        resource.data.ownerUserId == request.auth.uid
+      );
+
+      allow create: if isSignedIn() &&
+        requireBaseFieldsOnCreate(vendorId) &&
+        stringField(request.resource.data.ownerUserId) &&
+        stringField(request.resource.data.name) &&
+        request.resource.data.status in ['PENDING', 'ACTIVE', 'SUSPENDED', 'ARCHIVED'] &&
+        (
+          isAdminFamily() ||
+          (isVendor() && isApproved() && isRequestOwner('ownerUserId'))
+        );
+
+      allow update: if requireBaseFieldsOnUpdate(vendorId) && (
+        isAdminFamily() ||
+        (isVendor() &&
+          isApproved() &&
+          resource.data.ownerUserId == request.auth.uid &&
+          request.resource.data.ownerUserId == resource.data.ownerUserId)
+      );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /delivery_partners/{partnerId} {
+      allow read: if isAdminFamily() ||
+        (isSignedIn() && (
+          resource.data.userId == request.auth.uid ||
+          resource.data.status == 'ACTIVE'
+        ));
+
+      allow create: if isSignedIn() &&
+        requireBaseFieldsOnCreate(partnerId) &&
+        stringField(request.resource.data.userId) &&
+        request.resource.data.userId == partnerId &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status in ['PENDING', 'ACTIVE', 'SUSPENDED', 'OFFLINE'];
+
+      allow update: if requireBaseFieldsOnUpdate(partnerId) && (
+        isAdminFamily() ||
+        (isDeliveryPartner() &&
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == resource.data.userId)
+      );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if resource.data.isActive == true || isAdminFamily();
+
+      allow create: if isAdminFamily() && requireBaseFieldsOnCreate(categoryId);
+
+      allow update: if isAdminFamily() && requireBaseFieldsOnUpdate(categoryId);
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if isAdminFamily() ||
+        (resource.data.status == 'ACTIVE' && resource.data.isPublished == true) ||
+        (isSignedIn() && resource.data.vendorId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+        requireBaseFieldsOnCreate(productId) &&
+        stringField(request.resource.data.vendorId) &&
+        stringField(request.resource.data.categoryId) &&
+        stringField(request.resource.data.name) &&
+        numberField(request.resource.data.price) &&
+        (
+          isAdminFamily() ||
+          (isVendor() && request.resource.data.vendorId == request.auth.uid)
+        );
+
+      allow update: if requireBaseFieldsOnUpdate(productId) && (
+        isAdminFamily() ||
+        (
+          isVendor() &&
+          resource.data.vendorId == request.auth.uid &&
+          request.resource.data.vendorId == resource.data.vendorId
+        )
+      );
+
+      allow delete: if isAdminFamily();
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+        isAdminFamily() ||
+        resource.data.customerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid ||
+        resource.data.deliveryPartnerId == request.auth.uid
+      );
+
+      allow create: if isSignedIn() &&
+        requireBaseFieldsOnCreate(orderId) &&
+        isApproved() &&
+        isCustomer() &&
+        request.resource.data.customerId == request.auth.uid &&
+        stringField(request.resource.data.vendorId) &&
+        request.resource.data.status == 'PLACED';
+
+      allow update: if isSignedIn() &&
+        requireBaseFieldsOnUpdate(orderId) && (
+          isAdminFamily() ||
+          (
+            isCustomer() &&
+            resource.data.customerId == request.auth.uid &&
+            request.resource.data.customerId == resource.data.customerId &&
+            request.resource.data.vendorId == resource.data.vendorId &&
+            request.resource.data.deliveryPartnerId == resource.data.deliveryPartnerId
+          ) ||
+          (
+            isVendor() &&
+            resource.data.vendorId == request.auth.uid &&
+            request.resource.data.customerId == resource.data.customerId &&
+            request.resource.data.vendorId == resource.data.vendorId
+          ) ||
+          (
+            isDeliveryPartner() &&
+            resource.data.deliveryPartnerId == request.auth.uid &&
+            request.resource.data.customerId == resource.data.customerId &&
+            request.resource.data.vendorId == resource.data.vendorId &&
+            request.resource.data.deliveryPartnerId == resource.data.deliveryPartnerId
+          )
+        );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /order_items/{itemId} {
+      allow read: if isSignedIn() &&
+        stringField(resource.data.orderId) &&
+        canReadOrder(resource.data.orderId);
+
+      allow create: if isSignedIn() &&
+        requireBaseFieldsOnCreate(itemId) &&
+        stringField(request.resource.data.orderId) &&
+        (
+          isAdminFamily() ||
+          canReadOrder(request.resource.data.orderId)
+        );
+
+      allow update: if isSignedIn() &&
+        requireBaseFieldsOnUpdate(itemId) &&
+        stringField(resource.data.orderId) &&
+        request.resource.data.orderId == resource.data.orderId &&
+        (
+          isAdminFamily() ||
+          (
+            canReadOrder(resource.data.orderId) &&
+            orderDoc(resource.data.orderId).data.status == 'PLACED'
+          )
+        );
+
+      allow delete: if isAdminFamily();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && (
+        isAdminFamily() ||
+        resource.data.customerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid
+      );
+
+      allow create: if requireBaseFieldsOnCreate(paymentId) &&
+        (isAdminFamily() || hasPermission('payments:write'));
+
+      allow update: if requireBaseFieldsOnUpdate(paymentId) &&
+        (isAdminFamily() || hasPermission('payments:write'));
+
+      allow delete: if isAdminFamily() || hasPermission('payments:write');
+    }
+
+    match /roles/{roleId} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdminFamily() && requireBaseFieldsOnCreate(roleId);
+
+      allow update: if isAdminFamily() && requireBaseFieldsOnUpdate(roleId);
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /permissions/{permissionId} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdminFamily() && requireBaseFieldsOnCreate(permissionId);
+
+      allow update: if isAdminFamily() && requireBaseFieldsOnUpdate(permissionId);
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /wallets/{walletId} {
+      allow read: if isSignedIn() && (
+        isAdminFamily() ||
+        resource.data.userId == request.auth.uid
+      );
+
+      allow create: if requireBaseFieldsOnCreate(walletId) &&
+        (isAdminFamily() || hasPermission('wallets:write'));
+
+      allow update: if requireBaseFieldsOnUpdate(walletId) &&
+        (isAdminFamily() || hasPermission('wallets:write'));
+
+      allow delete: if isAdminFamily() || hasPermission('wallets:write');
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if resource.data.isPublished == true || isAdminFamily() ||
+        (isSignedIn() && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.vendorId == request.auth.uid
+        ));
+
+      allow create: if isSignedIn() &&
+        requireBaseFieldsOnCreate(reviewId) &&
+        isCustomer() &&
+        isApproved() &&
+        request.resource.data.customerId == request.auth.uid &&
+        stringField(request.resource.data.orderId) &&
+        stringField(request.resource.data.vendorId);
+
+      allow update: if isSignedIn() &&
+        requireBaseFieldsOnUpdate(reviewId) && (
+          isAdminFamily() ||
+          (
+            resource.data.customerId == request.auth.uid &&
+            request.resource.data.customerId == resource.data.customerId
+          )
+        );
+
+      allow delete: if isAdminFamily();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isSignedIn() && (
+        isAdminFamily() ||
+        resource.data.customerId == request.auth.uid ||
+        resource.data.vendorId == request.auth.uid
+      );
+
+      allow create: if isSignedIn() &&
+        requireBaseFieldsOnCreate(bookingId) &&
+        isApproved() &&
+        request.resource.data.customerId == request.auth.uid &&
+        stringField(request.resource.data.vendorId);
+
+      allow update: if isSignedIn() &&
+        requireBaseFieldsOnUpdate(bookingId) && (
+          isAdminFamily() ||
+          (
+            resource.data.customerId == request.auth.uid &&
+            request.resource.data.customerId == resource.data.customerId &&
+            request.resource.data.vendorId == resource.data.vendorId
+          ) ||
+          (
+            resource.data.vendorId == request.auth.uid &&
+            request.resource.data.customerId == resource.data.customerId &&
+            request.resource.data.vendorId == resource.data.vendorId
+          )
+        );
+
+      allow delete: if isAdminFamily();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
