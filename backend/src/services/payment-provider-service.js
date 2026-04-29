@@ -195,7 +195,7 @@ async function verifyCashfreePayment(order) {
   }
 
   const response = await fetch(
-    `${env.cashfreeBaseUrl}/orders/${encodeURIComponent(order._id.toString())}`,
+    `${env.cashfreeBaseUrl}/orders/${encodeURIComponent(order.paymentProviderOrderId || order._id.toString())}`,
     {
       headers: {
         'x-api-version': env.cashfreeApiVersion,
@@ -330,7 +330,7 @@ async function createCashfreeRefund(order, amount, reason) {
 
   const refundId = `refund_${crypto.randomUUID()}`;
   const response = await fetch(
-    `${env.cashfreeBaseUrl}/orders/${encodeURIComponent(order._id.toString())}/refunds`,
+    `${env.cashfreeBaseUrl}/orders/${encodeURIComponent(order.paymentProviderOrderId || order._id.toString())}/refunds`,
     {
       method: 'POST',
       headers: {

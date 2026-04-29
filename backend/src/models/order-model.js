@@ -38,6 +38,9 @@ const orderSchema = new mongoose.Schema(
     paymentClientSecret: { type: String, trim: true },
     paymentSessionId: { type: String, trim: true },
     paymentVerifiedAt: { type: Date },
+    checkoutSessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'CheckoutSession' },
+    orderGroupId: { type: String, trim: true },
+    splitSequence: { type: Number, default: 1 },
     refundedAmount: { type: Number, default: 0 },
     orderMode: {
       type: String,
@@ -48,6 +51,8 @@ const orderSchema = new mongoose.Schema(
     couponCode: { type: String, trim: true },
     discount: { type: Number, default: 0 },
     subtotal: { type: Number, required: true },
+    deliveryFee: { type: Number, default: 0 },
+    tax: { type: Number, default: 0 },
     total: { type: Number, required: true },
     customerName: { type: String, trim: true },
     customerPhoneNumber: { type: String, trim: true },

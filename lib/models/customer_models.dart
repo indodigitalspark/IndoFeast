@@ -224,31 +224,49 @@ class CartItemModel {
 class CustomerCartModel {
   const CustomerCartModel({
     required this.items,
+    required this.storeGroups,
     required this.couponCode,
     required this.discount,
     required this.orderMode,
     required this.paymentMethod,
     required this.subtotal,
+    required this.deliveryFee,
+    required this.tax,
     required this.total,
+    required this.grandTotal,
+    required this.grandItemCount,
+    required this.splitOrderMessage,
   });
 
   final List<CartItemModel> items;
+  final List<CartStoreGroupModel> storeGroups;
   final String? couponCode;
   final int discount;
   final String orderMode;
   final String paymentMethod;
   final int subtotal;
+  final int deliveryFee;
+  final int tax;
   final int total;
+  final int grandTotal;
+  final int grandItemCount;
+  final String splitOrderMessage;
 
   factory CustomerCartModel.empty() {
     return const CustomerCartModel(
       items: [],
+      storeGroups: [],
       couponCode: null,
       discount: 0,
       orderMode: 'DELIVERY',
       paymentMethod: 'COD',
       subtotal: 0,
+      deliveryFee: 0,
+      tax: 0,
       total: 0,
+      grandTotal: 0,
+      grandItemCount: 0,
+      splitOrderMessage: '',
     );
   }
 
@@ -257,12 +275,58 @@ class CustomerCartModel {
       items: List<Map<String, dynamic>>.from(
         map['items'] as List? ?? const [],
       ).map(CartItemModel.fromMap).toList(growable: false),
+      storeGroups: List<Map<String, dynamic>>.from(
+        map['storeGroups'] as List? ?? const [],
+      ).map(CartStoreGroupModel.fromMap).toList(growable: false),
       couponCode: map['couponCode'] as String?,
       discount: (map['discount'] as num? ?? 0).toInt(),
       orderMode: map['orderMode'] as String? ?? 'DELIVERY',
       paymentMethod: map['paymentMethod'] as String? ?? 'COD',
       subtotal: (map['subtotal'] as num? ?? 0).toInt(),
+      deliveryFee: (map['deliveryFee'] as num? ?? 0).toInt(),
+      tax: (map['tax'] as num? ?? 0).toInt(),
       total: (map['total'] as num? ?? 0).toInt(),
+      grandTotal: (map['grandTotal'] as num? ?? map['total'] as num? ?? 0)
+          .toInt(),
+      grandItemCount: (map['grandItemCount'] as num? ?? 0).toInt(),
+      splitOrderMessage: map['splitOrderMessage'] as String? ?? '',
+    );
+  }
+}
+
+class CartStoreGroupModel {
+  const CartStoreGroupModel({
+    required this.storeId,
+    required this.storeName,
+    required this.itemCount,
+    required this.subtotal,
+    required this.deliveryFee,
+    required this.tax,
+    required this.total,
+    required this.items,
+  });
+
+  final String storeId;
+  final String storeName;
+  final int itemCount;
+  final int subtotal;
+  final int deliveryFee;
+  final int tax;
+  final int total;
+  final List<CartItemModel> items;
+
+  factory CartStoreGroupModel.fromMap(Map<String, dynamic> map) {
+    return CartStoreGroupModel(
+      storeId: map['storeId'] as String? ?? '',
+      storeName: map['storeName'] as String? ?? '',
+      itemCount: (map['itemCount'] as num? ?? 0).toInt(),
+      subtotal: (map['subtotal'] as num? ?? 0).toInt(),
+      deliveryFee: (map['deliveryFee'] as num? ?? 0).toInt(),
+      tax: (map['tax'] as num? ?? 0).toInt(),
+      total: (map['total'] as num? ?? 0).toInt(),
+      items: List<Map<String, dynamic>>.from(
+        map['items'] as List? ?? const [],
+      ).map(CartItemModel.fromMap).toList(growable: false),
     );
   }
 }
@@ -299,6 +363,8 @@ class CustomerOrderModel {
     required this.couponCode,
     required this.discount,
     required this.subtotal,
+    required this.deliveryFee,
+    required this.tax,
     required this.total,
     required this.status,
     required this.paymentMethod,
@@ -308,6 +374,9 @@ class CustomerOrderModel {
     required this.paymentProviderOrderId,
     required this.paymentClientSecret,
     required this.paymentSessionId,
+    required this.checkoutSessionId,
+    required this.orderGroupId,
+    required this.splitSequence,
     required this.refundedAmount,
     required this.deliveryAddress,
     required this.deliveryPartnerName,
@@ -325,6 +394,8 @@ class CustomerOrderModel {
   final String? couponCode;
   final int discount;
   final int subtotal;
+  final int deliveryFee;
+  final int tax;
   final int total;
   final String status;
   final String paymentMethod;
@@ -334,6 +405,9 @@ class CustomerOrderModel {
   final String? paymentProviderOrderId;
   final String? paymentClientSecret;
   final String? paymentSessionId;
+  final String? checkoutSessionId;
+  final String? orderGroupId;
+  final int splitSequence;
   final int refundedAmount;
   final String deliveryAddress;
   final String? deliveryPartnerName;
@@ -356,6 +430,8 @@ class CustomerOrderModel {
       couponCode: map['couponCode'] as String?,
       discount: (map['discount'] as num? ?? 0).toInt(),
       subtotal: (map['subtotal'] as num? ?? 0).toInt(),
+      deliveryFee: (map['deliveryFee'] as num? ?? 0).toInt(),
+      tax: (map['tax'] as num? ?? 0).toInt(),
       total: (map['total'] as num? ?? 0).toInt(),
       status: map['status'] as String? ?? 'PLACED',
       paymentMethod: map['paymentMethod'] as String? ?? 'COD',
@@ -365,6 +441,9 @@ class CustomerOrderModel {
       paymentProviderOrderId: map['paymentProviderOrderId'] as String?,
       paymentClientSecret: map['paymentClientSecret'] as String?,
       paymentSessionId: map['paymentSessionId'] as String?,
+      checkoutSessionId: map['checkoutSessionId'] as String?,
+      orderGroupId: map['orderGroupId'] as String?,
+      splitSequence: (map['splitSequence'] as num? ?? 1).toInt(),
       refundedAmount: (map['refundedAmount'] as num? ?? 0).toInt(),
       deliveryAddress: map['deliveryAddress'] as String? ?? '',
       deliveryPartnerName: map['deliveryPartnerName'] as String?,
@@ -552,17 +631,76 @@ class CustomerDashboardState {
 }
 
 class CustomerCheckoutModel {
-  const CustomerCheckoutModel({required this.order, required this.checkout});
+  const CustomerCheckoutModel({
+    required this.checkoutSession,
+    required this.orders,
+    required this.checkout,
+  });
 
-  final CustomerOrderModel order;
+  final CustomerCheckoutSessionModel? checkoutSession;
+  final List<CustomerOrderModel> orders;
   final Map<String, dynamic>? checkout;
 
   factory CustomerCheckoutModel.fromMap(Map<String, dynamic> map) {
     return CustomerCheckoutModel(
-      order: CustomerOrderModel.fromMap(
-        map['order'] as Map<String, dynamic>? ?? <String, dynamic>{},
-      ),
+      checkoutSession: map['checkoutSession'] is Map<String, dynamic>
+          ? CustomerCheckoutSessionModel.fromMap(
+              map['checkoutSession'] as Map<String, dynamic>,
+            )
+          : null,
+      orders: List<Map<String, dynamic>>.from(
+        map['orders'] as List? ?? const [],
+      ).map(CustomerOrderModel.fromMap).toList(growable: false),
       checkout: map['checkout'] as Map<String, dynamic>?,
+    );
+  }
+}
+
+class CustomerCheckoutSessionModel {
+  const CustomerCheckoutSessionModel({
+    required this.id,
+    required this.orderGroupId,
+    required this.orderMode,
+    required this.paymentMethod,
+    required this.status,
+    required this.paymentStatus,
+    required this.subtotal,
+    required this.discount,
+    required this.deliveryFee,
+    required this.tax,
+    required this.grandTotal,
+    required this.stores,
+  });
+
+  final String id;
+  final String orderGroupId;
+  final String orderMode;
+  final String paymentMethod;
+  final String status;
+  final String paymentStatus;
+  final int subtotal;
+  final int discount;
+  final int deliveryFee;
+  final int tax;
+  final int grandTotal;
+  final List<CartStoreGroupModel> stores;
+
+  factory CustomerCheckoutSessionModel.fromMap(Map<String, dynamic> map) {
+    return CustomerCheckoutSessionModel(
+      id: map['id'] as String? ?? '',
+      orderGroupId: map['orderGroupId'] as String? ?? '',
+      orderMode: map['orderMode'] as String? ?? 'DELIVERY',
+      paymentMethod: map['paymentMethod'] as String? ?? 'COD',
+      status: map['status'] as String? ?? 'PENDING_PAYMENT',
+      paymentStatus: map['paymentStatus'] as String? ?? 'PENDING',
+      subtotal: (map['subtotal'] as num? ?? 0).toInt(),
+      discount: (map['discount'] as num? ?? 0).toInt(),
+      deliveryFee: (map['deliveryFee'] as num? ?? 0).toInt(),
+      tax: (map['tax'] as num? ?? 0).toInt(),
+      grandTotal: (map['grandTotal'] as num? ?? 0).toInt(),
+      stores: List<Map<String, dynamic>>.from(
+        map['stores'] as List? ?? const [],
+      ).map(CartStoreGroupModel.fromMap).toList(growable: false),
     );
   }
 }

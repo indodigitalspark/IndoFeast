@@ -1,3 +1,5 @@
+import { resolveMenuItemId } from './menu-item-ids.js';
+
 export function serializeUser(user) {
   return {
     id: user._id.toString(),
@@ -100,24 +102,6 @@ export function serializeRestaurant(restaurant) {
   };
 }
 
-function resolveMenuItemId(item, index) {
-  if (item?.itemId && String(item.itemId).trim()) {
-    return String(item.itemId).trim();
-  }
-
-  if (item?._id) {
-    return item._id.toString();
-  }
-
-  const slug = String(item?.name || `menu-item-${index + 1}`)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  return `legacy-${index + 1}-${slug || 'item'}`;
-}
-
 export function serializeCoupon(coupon) {
   return {
     id: coupon._id.toString(),
@@ -134,6 +118,44 @@ export function serializeCart(cart) {
   const items = cart?.items || [];
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = cart?.discount || 0;
+  const storeMap = new Map();
+
+  for (const item of items) {
+    const key = item.restaurantId.toString();
+    const store = storeMap.get(key) || {
+      storeId: key,
+      storeName: item.restaurantName,
+      itemCount: 0,
+      subtotal: 0,
+      items: [],
+    };
+
+    store.itemCount += item.quantity;
+    store.subtotal += item.price * item.quantity;
+    store.items.push({
+      restaurantId: key,
+      restaurantName: item.restaurantName,
+      menuItemId: item.menuItemId,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+    });
+    storeMap.set(key, store);
+  }
+
+  const storeGroups = [...storeMap.values()].map((store) => {
+    const deliveryFee = cart?.orderMode === 'DELIVERY' ? 40 : 0;
+    const tax = Math.round(store.subtotal * 0.05);
+    return {
+      ...store,
+      deliveryFee,
+      tax,
+      total: store.subtotal + deliveryFee + tax,
+    };
+  });
+  const deliveryFee = storeGroups.reduce((sum, store) => sum + store.deliveryFee, 0);
+  const tax = storeGroups.reduce((sum, store) => sum + store.tax, 0);
+  const grandTotal = Math.max(subtotal + deliveryFee + tax - discount, 0);
 
   return {
     items: items.map((item) => ({
@@ -146,10 +168,19 @@ export function serializeCart(cart) {
     })),
     couponCode: cart?.couponCode || null,
     discount,
+    storeGroups,
     orderMode: cart?.orderMode || 'DELIVERY',
     paymentMethod: cart?.paymentMethod || 'COD',
     subtotal,
-    total: Math.max(subtotal - discount, 0),
+    deliveryFee,
+    tax,
+    total: grandTotal,
+    grandTotal,
+    grandItemCount: items.reduce((sum, item) => sum + item.quantity, 0),
+    splitOrderMessage:
+      storeGroups.length > 1
+        ? 'Items will be placed as separate store orders after one combined checkout.'
+        : 'Your order will be placed with the selected store after checkout.',
   };
 }
 
@@ -174,10 +205,15 @@ export function serializeOrder(order) {
     paymentClientSecret: order.paymentClientSecret || null,
     paymentSessionId: order.paymentSessionId || null,
     paymentVerifiedAt: order.paymentVerifiedAt?.toISOString() || null,
+    checkoutSessionId: order.checkoutSessionId?.toString() || null,
+    orderGroupId: order.orderGroupId || null,
+    splitSequence: order.splitSequence ?? 1,
     refundedAmount: order.refundedAmount ?? 0,
     couponCode: order.couponCode || null,
     discount: order.discount,
     subtotal: order.subtotal,
+    deliveryFee: order.deliveryFee ?? 0,
+    tax: order.tax ?? 0,
     total: order.total,
     status: order.status,
     customerName: order.customerName || 'Customer',
@@ -222,6 +258,42 @@ export function serializeOrder(order) {
     tracking,
     createdAt: order.createdAt?.toISOString(),
     updatedAt: order.updatedAt?.toISOString(),
+  };
+}
+
+export function serializeCheckoutSession(checkoutSession) {
+  return {
+    id: checkoutSession._id.toString(),
+    orderGroupId: checkoutSession.orderGroupId,
+    orderMode: checkoutSession.orderMode,
+    paymentMethod: checkoutSession.paymentMethod,
+    status: checkoutSession.status,
+    paymentStatus: checkoutSession.paymentStatus,
+    paymentProviderOrderId: checkoutSession.paymentProviderOrderId || null,
+    paymentReferenceId: checkoutSession.paymentReferenceId || null,
+    paymentSessionId: checkoutSession.paymentSessionId || null,
+    subtotal: checkoutSession.subtotal ?? 0,
+    discount: checkoutSession.discount ?? 0,
+    deliveryFee: checkoutSession.deliveryFee ?? 0,
+    tax: checkoutSession.tax ?? 0,
+    grandTotal: checkoutSession.total ?? 0,
+    stores: (checkoutSession.stores || []).map((store) => ({
+      storeId: store.restaurantId?.toString() || '',
+      storeName: store.restaurantName,
+      itemCount: store.itemCount ?? 0,
+      subtotal: store.subtotal ?? 0,
+      deliveryFee: store.deliveryFee ?? 0,
+      tax: store.tax ?? 0,
+      discount: store.discount ?? 0,
+      total: store.total ?? 0,
+      items: (store.items || []).map((item) => ({
+        menuItemId: item.menuItemId,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      })),
+    })),
+    createdOrderIds: (checkoutSession.createdOrderIds || []).map((id) => id.toString()),
   };
 }
 

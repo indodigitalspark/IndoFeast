@@ -2534,55 +2534,114 @@ class _CartSheet extends ConsumerWidget {
                 subtitle: 'Add items from a vendor menu to continue.',
               )
             else ...[
-              ...data.cart.items.map(
-                (item) => Padding(
+              if (data.cart.splitOrderMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: Card(
+                    color: const Color(0xFFFFF6E9),
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Text(
+                        data.cart.splitOrderMessage,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.saffron,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ...data.cart.storeGroups.map(
+                (store) => Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.md),
                   child: Card(
                     child: Padding(
                       padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.name,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${item.restaurantName} • ${_rupees(item.price)}',
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => controller.removeFromCart(
-                              restaurantId: item.restaurantId,
-                              menuItemId: item.menuItemId,
-                            ),
-                            icon: const Icon(Icons.remove_circle_outline),
-                          ),
                           Text(
-                            '${item.quantity}',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                            store.storeName,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
                           ),
-                          IconButton(
-                            onPressed: () => controller.addToCart(
-                              restaurantId: item.restaurantId,
-                              menuItemId: item.menuItemId,
+                          const SizedBox(height: AppSpacing.sm),
+                          ...store.items.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpacing.sm,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.name,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(_rupees(item.price)),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => controller.removeFromCart(
+                                      restaurantId: item.restaurantId,
+                                      menuItemId: item.menuItemId,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${item.quantity}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => controller.addToCart(
+                                      restaurantId: item.restaurantId,
+                                      menuItemId: item.menuItemId,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.add_circle_outline,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () => controller.removeFromCart(
+                                      restaurantId: item.restaurantId,
+                                      menuItemId: item.menuItemId,
+                                      removeCompletely: true,
+                                    ),
+                                    icon: const Icon(Icons.delete_outline),
+                                  ),
+                                ],
+                              ),
                             ),
-                            icon: const Icon(Icons.add_circle_outline),
                           ),
-                          IconButton(
-                            onPressed: () => controller.removeFromCart(
-                              restaurantId: item.restaurantId,
-                              menuItemId: item.menuItemId,
-                              removeCompletely: true,
-                            ),
-                            icon: const Icon(Icons.delete_outline),
+                          const Divider(height: AppSpacing.lg),
+                          _PriceRow(
+                            label: '${store.storeName} subtotal',
+                            value: store.subtotal,
+                          ),
+                          _PriceRow(
+                            label: 'Delivery fee',
+                            value: store.deliveryFee,
+                          ),
+                          _PriceRow(label: 'Tax', value: store.tax),
+                          _PriceRow(
+                            label: 'Store total',
+                            value: store.total,
+                            emphasize: true,
                           ),
                         ],
                       ),
@@ -2641,24 +2700,12 @@ class _CartSheet extends ConsumerWidget {
                         value: data.cart.subtotal,
                       ),
                       _PriceRow(label: 'Discount', value: -data.cart.discount),
-                      _PriceRow(
-                        label: 'Delivery fee',
-                        value: _deliveryChargeForMode(data.cart.orderMode),
-                      ),
-                      const _PriceRow(label: 'Platform fee', value: 10),
-                      _PriceRow(
-                        label: 'GST',
-                        value: _gstForAmount(
-                          data.cart.subtotal -
-                              data.cart.discount +
-                              _deliveryChargeForMode(data.cart.orderMode) +
-                              10,
-                        ),
-                      ),
+                      _PriceRow(label: 'Delivery fee', value: data.cart.deliveryFee),
+                      _PriceRow(label: 'Tax', value: data.cart.tax),
                       const Divider(height: AppSpacing.xl),
                       _PriceRow(
                         label: 'Grand total',
-                        value: _grandTotal(data.cart),
+                        value: data.cart.grandTotal,
                         emphasize: true,
                       ),
                     ],
@@ -2778,15 +2825,49 @@ class _CheckoutSheet extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ...data.cart.items.map(
-                    (item) => Padding(
+                  if (data.cart.splitOrderMessage.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      child: Text(
+                        data.cart.splitOrderMessage,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.saffron,
+                        ),
+                      ),
+                    ),
+                  ...data.cart.storeGroups.map(
+                    (store) => Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text('${item.quantity}x ${item.name}'),
+                          Text(
+                            store.storeName,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w800),
                           ),
-                          Text(_rupees(item.price * item.quantity)),
+                          const SizedBox(height: 6),
+                          ...store.items.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AppSpacing.xs,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text('${item.quantity}x ${item.name}'),
+                                  ),
+                                  Text(_rupees(item.price * item.quantity)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          _PriceRow(
+                            label: '${store.storeName} total',
+                            value: store.total,
+                          ),
                         ],
                       ),
                     ),
@@ -2794,24 +2875,12 @@ class _CheckoutSheet extends ConsumerWidget {
                   const Divider(height: AppSpacing.xl),
                   _PriceRow(label: 'Items total', value: data.cart.subtotal),
                   _PriceRow(label: 'Discount', value: -data.cart.discount),
-                  _PriceRow(
-                    label: 'Delivery fee',
-                    value: _deliveryChargeForMode(data.cart.orderMode),
-                  ),
-                  const _PriceRow(label: 'Platform fee', value: 10),
-                  _PriceRow(
-                    label: 'Taxes',
-                    value: _gstForAmount(
-                      data.cart.subtotal -
-                          data.cart.discount +
-                          _deliveryChargeForMode(data.cart.orderMode) +
-                          10,
-                    ),
-                  ),
+                  _PriceRow(label: 'Delivery fee', value: data.cart.deliveryFee),
+                  _PriceRow(label: 'Taxes', value: data.cart.tax),
                   const Divider(height: AppSpacing.xl),
                   _PriceRow(
                     label: 'Grand total',
-                    value: _grandTotal(data.cart),
+                    value: data.cart.grandTotal,
                     emphasize: true,
                   ),
                 ],
@@ -3918,7 +3987,7 @@ Future<void> _handleCheckout(
       ..showSnackBar(
         SnackBar(
           content: Text(
-            '${data.cart.paymentMethod} order placed successfully. Tracking is now available in Orders.',
+            '${checkout.orders.length} store order${checkout.orders.length == 1 ? '' : 's'} placed successfully. Tracking is now available in Orders.',
           ),
         ),
       );
@@ -3935,8 +4004,11 @@ Future<void> _showPaymentVerificationDialog(
 ) async {
   final paymentIdController = TextEditingController();
   final signatureController = TextEditingController();
-  final order = checkout.order;
-  final provider = order.paymentMethod;
+  final session = checkout.checkoutSession;
+  final provider = session?.paymentMethod ?? '';
+  if (session == null) {
+    return;
+  }
 
   await showDialog<void>(
     context: context,
@@ -3952,11 +4024,17 @@ Future<void> _showPaymentVerificationDialog(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Order ${order.id} created. Complete the provider checkout, then verify it here.',
+                  'Complete one $provider payment for ${session.stores.length} store order${session.stores.length == 1 ? '' : 's'}, then verify it here.',
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 if (checkout.checkout != null)
                   SelectableText(checkout.checkout.toString()),
+                const SizedBox(height: AppSpacing.sm),
+                ...session.stores.map(
+                  (store) => Text(
+                    '${store.storeName}: ${_rupees(store.total)}',
+                  ),
+                ),
                 if (provider == 'RAZORPAY') ...[
                   const SizedBox(height: AppSpacing.md),
                   TextField(
@@ -3993,7 +4071,10 @@ Future<void> _showPaymentVerificationDialog(
 
               await ref
                   .read(customerDashboardControllerProvider.notifier)
-                  .verifyPayment(orderId: order.id, payload: payload);
+                  .verifyPayment(
+                    checkoutSessionId: session.id,
+                    payload: payload,
+                  );
               if (dialogContext.mounted) {
                 Navigator.of(dialogContext).pop();
               }
@@ -4117,25 +4198,6 @@ int _priceWeight(String value) {
     '₹₹₹₹' => 4,
     _ => 99,
   };
-}
-
-int _deliveryChargeForMode(String orderMode) {
-  return switch (orderMode) {
-    'PICKUP' || 'DINE_IN' => 0,
-    _ => 30,
-  };
-}
-
-int _gstForAmount(int amount) {
-  final safeAmount = amount < 0 ? 0 : amount;
-  return (safeAmount * 0.05).round();
-}
-
-int _grandTotal(CustomerCartModel cart) {
-  final delivery = _deliveryChargeForMode(cart.orderMode);
-  final platformFee = 10;
-  final preTax = cart.subtotal - cart.discount + delivery + platformFee;
-  return preTax + _gstForAmount(preTax);
 }
 
 bool _isVegCuisine(String value) {

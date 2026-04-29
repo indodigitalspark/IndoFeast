@@ -146,17 +146,17 @@ class CustomerDashboardController
     });
   }
 
-  Future<CustomerOrderModel> verifyPayment({
-    required String orderId,
+  Future<CustomerCheckoutModel> verifyPayment({
+    required String checkoutSessionId,
     required Map<String, dynamic> payload,
   }) async {
-    final order = await _dataSource.verifyPayment(
-      orderId: orderId,
+    final checkout = await _dataSource.verifyPayment(
+      checkoutSessionId: checkoutSessionId,
       payload: payload,
     );
     final current = state.valueOrNull ?? CustomerDashboardState.initial();
     state = AsyncData(await _loadDashboard(current));
-    return order;
+    return checkout;
   }
 
   Future<void> addFunds(int amount) async {

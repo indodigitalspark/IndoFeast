@@ -3,16 +3,22 @@ import express from 'express';
 import { requireAuth, requireRoles } from '../middleware/auth-middleware.js';
 import { getOrCreateAdminConfig } from '../services/admin-config-service.js';
 import { CartModel } from '../models/cart-model.js';
+import { CheckoutSessionModel } from '../models/checkout-session-model.js';
 import { CouponModel } from '../models/coupon-model.js';
 import { OrderModel } from '../models/order-model.js';
 import { RestaurantModel } from '../models/restaurant-model.js';
 import { UserModel } from '../models/user-model.js';
+import {
+  buildCheckoutBreakdown,
+  finalizeCheckoutSession,
+} from '../services/customer-checkout-service.js';
 import { cancelOrder } from '../services/order-lifecycle-service.js';
 import {
   createProviderPayment,
   refundProviderPayment,
   verifyProviderPayment,
 } from '../services/payment-provider-service.js';
+import { findRestaurantMenuItem } from '../utils/menu-item-ids.js';
 import {
   initializeSse,
   pushSse,
@@ -20,6 +26,7 @@ import {
 } from '../services/realtime-service.js';
 import {
   serializeCart,
+  serializeCheckoutSession,
   serializeCoupon,
   serializeOrder,
   serializeRestaurant,
@@ -97,7 +104,7 @@ router.get('/cart', async (req, res) => {
 });
 
 router.post('/cart/items', async (req, res) => {
-  const { restaurantId, menuItemId, replaceCart = false } = req.body;
+  const { restaurantId, menuItemId } = req.body;
   if (!restaurantId || !menuItemId) {
     return res.status(400).json({
       message: 'Restaurant and menu item identifiers are required.',
@@ -123,21 +130,6 @@ router.post('/cart/items', async (req, res) => {
   }
 
   const cart = await getOrCreateCart(req.user._id);
-  if (
-    cart.items.length > 0 &&
-    cart.items[0].restaurantId.toString() !== restaurantId
-  ) {
-    if (replaceCart) {
-      cart.items = [];
-      cart.couponCode = undefined;
-      cart.discount = 0;
-    } else {
-      return res.status(400).json({
-        message:
-          'Your cart already contains items from another restaurant. Remove them before adding from a new one.',
-      });
-    }
-  }
   const existing = cart.items.find(
     (item) =>
       item.restaurantId.toString() === restaurantId &&
@@ -250,109 +242,88 @@ router.post('/orders', async (req, res) => {
     return res.status(400).json({ message: 'Your cart is empty.' });
   }
 
-  const subtotal = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const total = Math.max(subtotal - cart.discount, 0);
   const paymentMethod = String(req.body.paymentMethod || cart.paymentMethod || 'COD').toUpperCase();
-  const restaurantId = cart.items[0].restaurantId;
-  const restaurant = await RestaurantModel.findById(restaurantId);
-  if (!restaurant) {
-    return res.status(404).json({ message: 'Restaurant not found.' });
-  }
-  if (restaurant.storeStatus === 'CLOSED') {
-    return res.status(400).json({
-      message: 'This store is currently closed. Please check back later.',
-    });
+  if (!['COD', 'WALLET', 'RAZORPAY', 'CASHFREE', 'STRIPE'].includes(paymentMethod)) {
+    return res.status(400).json({ message: 'Unsupported payment method.' });
   }
 
-  for (const cartItem of cart.items) {
-    const resolvedMenuItem = findRestaurantMenuItem(restaurant, cartItem.menuItemId);
-    const menuItem = resolvedMenuItem?.item;
-    if (!menuItem || !menuItem.isAvailable || menuItem.stock < cartItem.quantity) {
-      return res.status(400).json({
-        message: `Insufficient stock for ${cartItem.name}. Please update your cart.`,
+  try {
+    const breakdown = await buildCheckoutBreakdown({
+      ...cart.toObject(),
+      paymentMethod,
+    });
+
+    const checkoutSession = await CheckoutSessionModel.create({
+      userId: req.user._id,
+      orderGroupId: `grp_${Date.now()}_${req.user._id.toString().slice(-6)}`,
+      orderMode: breakdown.orderMode,
+      paymentMethod,
+      status:
+        paymentMethod === 'COD' || paymentMethod === 'WALLET'
+          ? 'PAYMENT_VERIFIED'
+          : 'PENDING_PAYMENT',
+      paymentStatus:
+        paymentMethod === 'COD'
+          ? 'PENDING_COD_COLLECTION'
+          : paymentMethod === 'WALLET'
+            ? 'PAID'
+            : 'PENDING',
+      couponCode: breakdown.couponCode,
+      discount: breakdown.discount,
+      subtotal: breakdown.subtotal,
+      deliveryFee: breakdown.deliveryFee,
+      tax: breakdown.tax,
+      total: breakdown.total,
+      stores: breakdown.stores,
+      paymentReferenceId:
+        paymentMethod === 'COD'
+          ? `cod_${Date.now()}`
+          : paymentMethod === 'WALLET'
+            ? `wallet_${Date.now()}`
+            : undefined,
+      paymentVerifiedAt:
+        paymentMethod === 'COD' || paymentMethod === 'WALLET'
+          ? new Date()
+          : undefined,
+    });
+
+    if (paymentMethod === 'COD' || paymentMethod === 'WALLET') {
+      const orders = await finalizeCheckoutSession({
+        checkoutSession,
+        userId: req.user._id,
+        paymentStatus: checkoutSession.paymentStatus,
+        paymentReferenceId: checkoutSession.paymentReferenceId,
+        paymentVerifiedAt: checkoutSession.paymentVerifiedAt,
+      });
+      const refreshedSession = await CheckoutSessionModel.findById(checkoutSession._id);
+      const nextCart = await getOrCreateCart(req.user._id);
+
+      return res.status(201).json({
+        message: 'Orders placed successfully.',
+        checkoutSession: serializeCheckoutSession(refreshedSession || checkoutSession),
+        orders: orders.map(serializeOrder),
+        cart: serializeCart(nextCart),
       });
     }
-  }
 
-  const order = await OrderModel.create({
-    userId: req.user._id,
-    restaurantId: restaurant._id,
-    restaurantName: restaurant.name,
-    items: cart.items.map((item) => ({
-      menuItemId: item.menuItemId,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-    })),
-    paymentMethod,
-    orderMode: cart.orderMode,
-    couponCode: cart.couponCode,
-    discount: cart.discount,
-    subtotal,
-    total,
-    customerName: req.user.displayName,
-    customerPhoneNumber: req.user.phoneNumber,
-    pickupAddress: `${restaurant.name}, Partner Pickup Counter`,
-    pickupLatitude: 28.6139 + createCoordinateOffset(restaurant._id.toString(), 0),
-    pickupLongitude: 77.2090 + createCoordinateOffset(restaurant._id.toString(), 1),
-    deliveryAddress: buildCustomerAddress(req.user),
-    deliveryLatitude: 28.6225 + createCoordinateOffset(req.user._id.toString(), 2),
-    deliveryLongitude: 77.2187 + createCoordinateOffset(req.user._id.toString(), 3),
-    deliveryOtp: await generateUniqueDeliveryOtp(),
-    status: 'PLACED',
-    paymentStatus: paymentMethod === 'COD' ? 'PENDING_COD_COLLECTION' : 'PENDING',
-  });
+    const provider = await createProviderPayment({ order: checkoutSession, user: req.user });
+    checkoutSession.paymentProviderOrderId = provider.providerOrderId;
+    checkoutSession.paymentSessionId = provider.sessionId;
+    checkoutSession.paymentClientSecret = provider.clientSecret;
+    checkoutSession.paymentStatus = provider.paymentStatus;
+    checkoutSession.paymentVerifiedAt = provider.verifiedAt || undefined;
+    await checkoutSession.save();
 
-  let checkout = null;
-  if (paymentMethod === 'WALLET') {
-    if ((req.user.walletBalance || 0) < total) {
-      return res.status(400).json({ message: 'Insufficient wallet balance.' });
-    }
-    req.user.walletBalance -= total;
-    req.user.walletTransactions.push({
-      amount: total,
-      type: 'DEBIT',
-      category: 'ORDER_PAYMENT',
-      description: `Wallet payment for order ${order._id.toString().slice(-6).toUpperCase()}`,
-      orderId: order._id,
-      createdAt: new Date(),
+    return res.status(201).json({
+      message: 'Complete the payment to place separate store orders.',
+      checkoutSession: serializeCheckoutSession(checkoutSession),
+      checkout: provider.sessionPayload,
     });
-    await req.user.save();
-    order.paymentStatus = 'PAID';
-    order.paymentVerifiedAt = new Date();
-    order.paymentReferenceId = `wallet_${order._id.toString()}`;
-    await order.save();
-  } else if (paymentMethod !== 'COD') {
-    const provider = await createProviderPayment({ order, user: req.user });
-    order.paymentProviderOrderId = provider.providerOrderId;
-    order.paymentSessionId = provider.sessionId;
-    order.paymentClientSecret = provider.clientSecret;
-    order.paymentStatus = provider.paymentStatus;
-    order.paymentVerifiedAt = provider.verifiedAt || undefined;
-    await order.save();
-    checkout = provider.sessionPayload;
+  } catch (error) {
+    return res.status(400).json({
+      message: error instanceof Error ? error.message : 'Could not prepare checkout.',
+    });
   }
-
-  for (const cartItem of cart.items) {
-    const menuItem = findRestaurantMenuItem(restaurant, cartItem.menuItemId)?.item;
-    if (menuItem) {
-      menuItem.stock -= cartItem.quantity;
-      menuItem.isAvailable = menuItem.stock > 0;
-    }
-  }
-  await restaurant.save();
-
-  cart.items = [];
-  cart.couponCode = undefined;
-  cart.discount = 0;
-  await cart.save();
-
-  return res.status(201).json({
-    message: 'Order placed successfully.',
-    order: serializeOrder(order),
-    cart: serializeCart(cart),
-    checkout,
-  });
 });
 
 router.post('/orders/:id/cancel', async (req, res) => {
@@ -414,26 +385,81 @@ router.post('/orders/:id/cancel', async (req, res) => {
   });
 });
 
-router.post('/orders/:id/payment/verify', async (req, res) => {
-  const order = await OrderModel.findOne({ _id: req.params.id, userId: req.user._id });
-  if (!order) {
-    return res.status(404).json({ message: 'Order not found.' });
-  }
-
-  if (['PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus)) {
-    return res.json({ message: 'Payment already verified.', order: serializeOrder(order) });
-  }
-
-  const verification = await verifyProviderPayment({ order, payload: req.body });
-  order.paymentStatus = verification.status;
-  order.paymentReferenceId = verification.referenceId || order.paymentReferenceId;
-  order.paymentVerifiedAt = verification.verifiedAt || new Date();
-  await order.save();
-
-  return res.json({
-    message: 'Payment verified.',
-    order: serializeOrder(order),
+router.post('/checkouts/:id/verify', async (req, res) => {
+  const checkoutSession = await CheckoutSessionModel.findOne({
+    _id: req.params.id,
+    userId: req.user._id,
   });
+  if (!checkoutSession) {
+    return res.status(404).json({ message: 'Checkout session not found.' });
+  }
+
+  if (checkoutSession.status === 'FINALIZED' && checkoutSession.createdOrderIds.length > 0) {
+    const orders = await OrderModel.find({
+      _id: { $in: checkoutSession.createdOrderIds },
+    }).sort({ createdAt: 1 });
+    const cart = await getOrCreateCart(req.user._id);
+    return res.json({
+      message: 'Payment already verified.',
+      checkoutSession: serializeCheckoutSession(checkoutSession),
+      orders: orders.map(serializeOrder),
+      cart: serializeCart(cart),
+    });
+  }
+
+  try {
+    const verification = await verifyProviderPayment({
+      order: checkoutSession,
+      payload: req.body,
+    });
+    checkoutSession.paymentStatus = verification.status;
+    checkoutSession.paymentReferenceId =
+      verification.referenceId || checkoutSession.paymentReferenceId;
+    checkoutSession.paymentVerifiedAt = verification.verifiedAt || new Date();
+    checkoutSession.status = 'PAYMENT_VERIFIED';
+    await checkoutSession.save();
+
+    const orders = await finalizeCheckoutSession({
+      checkoutSession,
+      userId: req.user._id,
+      paymentStatus: verification.status,
+      paymentReferenceId: checkoutSession.paymentReferenceId,
+      paymentVerifiedAt: checkoutSession.paymentVerifiedAt,
+    });
+    const refreshedSession = await CheckoutSessionModel.findById(checkoutSession._id);
+    const cart = await getOrCreateCart(req.user._id);
+
+    return res.json({
+      message: 'Payment verified and store orders created.',
+      checkoutSession: serializeCheckoutSession(refreshedSession || checkoutSession),
+      orders: orders.map(serializeOrder),
+      cart: serializeCart(cart),
+    });
+  } catch (error) {
+    try {
+      if (checkoutSession.paymentStatus === 'PAID' || checkoutSession.status === 'PAYMENT_VERIFIED') {
+        await refundProviderPayment({
+          order: checkoutSession,
+          amount: checkoutSession.total,
+          reason: 'Auto refund: store order creation failed after payment verification.',
+        });
+        checkoutSession.status = 'REFUNDED';
+        checkoutSession.paymentStatus = 'REFUNDED';
+        checkoutSession.refundedAt = new Date();
+      } else {
+        checkoutSession.status = 'FAILED';
+        checkoutSession.paymentStatus = 'FAILED';
+      }
+
+      checkoutSession.failureReason =
+        error instanceof Error ? error.message : 'Checkout verification failed.';
+      await checkoutSession.save();
+    } catch (_) {}
+
+    return res.status(400).json({
+      message: error instanceof Error ? error.message : 'Payment verification failed.',
+    });
+  }
 });
 
 router.get('/orders/active', async (req, res) => {
@@ -546,77 +572,12 @@ router.post('/wallet/add-funds', async (req, res) => {
   });
 });
 
-function findRestaurantMenuItem(restaurant, menuItemId) {
-  for (const [index, item] of (restaurant.menuItems || []).entries()) {
-    const resolvedId = resolveMenuItemId(item, index);
-    if (resolvedId === String(menuItemId)) {
-      return { item, index, id: resolvedId };
-    }
-  }
-
-  return null;
-}
-
-function resolveMenuItemId(item, index) {
-  if (item?.itemId && String(item.itemId).trim()) {
-    return String(item.itemId).trim();
-  }
-
-  if (item?._id) {
-    return item._id.toString();
-  }
-
-  const slug = String(item?.name || `menu-item-${index + 1}`)
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  return `legacy-${index + 1}-${slug || 'item'}`;
-}
-
 async function getOrCreateCart(userId) {
   let cart = await CartModel.findOne({ userId });
   if (!cart) {
     cart = await CartModel.create({ userId });
   }
   return cart;
-}
-
-async function generateUniqueDeliveryOtp() {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const otp = String(Math.floor(1000 + Math.random() * 9000));
-    const existing = await OrderModel.exists({
-      deliveryOtp: otp,
-      status: { $nin: ['DELIVERED', 'CANCELLED'] },
-    });
-
-    if (!existing) {
-      return otp;
-    }
-  }
-
-  return String(Math.floor(1000 + Math.random() * 9000));
-}
-
-function buildCustomerAddress(user) {
-  const initials = String(user.displayName || 'Customer')
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() || '')
-    .join('')
-    .slice(0, 3);
-  return `House ${initials || 'CF'}-12, Green Residency`;
-}
-
-function createCoordinateOffset(seed, index) {
-  const source = `${seed}:${index}`;
-  let total = 0;
-  for (let position = 0; position < source.length; position += 1) {
-    total += source.charCodeAt(position) * (position + 1);
-  }
-
-  return ((total % 900) - 450) / 10000;
 }
 
 export { router as customerRoutes };

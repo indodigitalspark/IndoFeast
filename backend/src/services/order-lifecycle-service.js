@@ -1,3 +1,5 @@
+import { findRestaurantMenuItem } from '../utils/menu-item-ids.js';
+
 export async function cancelOrder({
   order,
   restaurant,
@@ -69,9 +71,7 @@ export async function markOrderDelivered({ order, restaurant }) {
 
 export async function restoreStock(restaurant, order) {
   for (const orderedItem of order.items) {
-    const menuItem = restaurant.menuItems.find(
-      (entry) => entry.itemId === orderedItem.menuItemId,
-    );
+    const menuItem = findRestaurantMenuItem(restaurant, orderedItem.menuItemId)?.item;
     if (menuItem) {
       menuItem.stock += orderedItem.quantity;
       menuItem.isAvailable = menuItem.stock > 0;
