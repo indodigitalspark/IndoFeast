@@ -27,7 +27,8 @@ export function createApp() {
       if (
         allowAnyOrigin ||
         allowedOrigins.includes(origin) ||
-        isLocalFlutterOrigin(origin)
+        isLocalFlutterOrigin(origin) ||
+        isTrustedVercelOrigin(origin)
       ) {
         return callback(null, true);
       }
@@ -75,4 +76,8 @@ export function createApp() {
 
 function isLocalFlutterOrigin(origin) {
   return /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+}
+
+function isTrustedVercelOrigin(origin) {
+  return /^https:\/\/indo-feast(?:-[a-z0-9-]+)?\.vercel\.app$/i.test(origin);
 }
