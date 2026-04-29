@@ -1,6 +1,22 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import dotenv from 'dotenv';
 
-dotenv.config();
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const backendRoot = path.resolve(currentDir, '..', '..');
+const repoRoot = path.resolve(backendRoot, '..');
+const candidateEnvFiles = [
+  path.join(repoRoot, '.env'),
+  path.join(backendRoot, '.env'),
+];
+
+for (const envFile of candidateEnvFiles) {
+  if (fs.existsSync(envFile)) {
+    dotenv.config({ path: envFile, override: false });
+  }
+}
 
 export const env = {
   port: process.env.PORT || '4000',
