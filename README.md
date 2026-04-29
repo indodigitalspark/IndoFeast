@@ -95,40 +95,24 @@ Local integration notes:
 
 ## Deploy on Vercel
 
-This project is best deployed to Vercel as two separate projects:
+This repository can now be deployed to Vercel as a single project:
 
-1. Frontend project
-   Root directory: repository root
-2. Backend project
-   Root directory: `backend`
+- Flutter web frontend is built to static output
+- Express backend is exposed as `/api` through [api/index.js](api/index.js)
 
-### Frontend on Vercel
+The repository includes:
 
-The repository now includes a root [vercel.json](vercel.json) and a build script at [scripts/vercel-build-frontend.sh](scripts/vercel-build-frontend.sh).
+- [vercel.json](vercel.json)
+- [scripts/vercel-build-frontend.sh](scripts/vercel-build-frontend.sh)
+- [api/index.js](api/index.js)
+- [backend/src/index.js](backend/src/index.js)
 
-Required Vercel environment variable:
-
-```bash
-API_BASE_URL=https://your-backend-domain.vercel.app/api
-```
-
-Frontend notes:
-
-- The build step installs Flutter in the Vercel build environment, runs `flutter pub get`, and builds `build/web`.
-- SPA routing is handled with a Vercel rewrite to `index.html`.
-
-### Backend on Vercel
-
-Set the Vercel project root directory to `backend/`.
-
-The backend now exposes [backend/src/index.js](backend/src/index.js), which exports the Express app in a Vercel-friendly format.
-
-Required backend environment variables:
+Required Vercel environment variables:
 
 ```bash
 MONGODB_URI=...
 JWT_SECRET=...
-CLIENT_ORIGIN=https://your-frontend-domain.vercel.app
+CLIENT_ORIGIN=https://your-vercel-domain.vercel.app
 DEFAULT_ADMIN_EMAIL=...
 DEFAULT_ADMIN_PASSWORD=...
 DEFAULT_ADMIN_NAME=...
@@ -147,7 +131,12 @@ STRIPE_SECRET_KEY=...
 STRIPE_PUBLISHABLE_KEY=...
 ```
 
-Important backend limitation on Vercel:
+Notes:
+
+- `API_BASE_URL` is optional on Vercel now. If omitted, the frontend automatically uses `/api`.
+- SPA routing is handled in `vercel.json` without breaking `/api` routes.
+
+Important limitation on Vercel:
 
 - Uploaded files stored on local disk are not durable on serverless infrastructure.
 - This app currently writes uploads to `backend/uploads/`.

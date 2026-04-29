@@ -32,9 +32,13 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+node_modules/
 backend/node_modules/
 backend/uploads/
 backend/.env
+.vercel/
+.vercel-home/
+.vercel-home-cache/
 
 # Symbolication related
 app.*.symbols
