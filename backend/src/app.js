@@ -3,6 +3,7 @@ import express from 'express';
 
 import { isDemoModeEnabled } from './config/db.js';
 import { env } from './config/env.js';
+import { uploadDirectory } from './config/uploads.js';
 import { adminRoutes } from './routes/admin-routes.js';
 import { authRoutes } from './routes/auth-routes.js';
 import { customerRoutes } from './routes/customer-routes.js';
@@ -41,7 +42,7 @@ export function createApp() {
   app.use(cors(corsOptions));
   app.options(/.*/, cors(corsOptions));
   app.use(express.json());
-  app.use('/backend/uploads', express.static('backend/uploads'));
+  app.use('/backend/uploads', express.static(uploadDirectory));
 
   app.get('/', (req, res) => {
     res.json({

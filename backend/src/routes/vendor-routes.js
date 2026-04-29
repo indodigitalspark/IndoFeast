@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 
 import express from 'express';
-import multer from 'multer';
 
+import { upload } from '../config/uploads.js';
 import { requireAuth, requireRoles } from '../middleware/auth-middleware.js';
 import { OrderModel } from '../models/order-model.js';
 import { RestaurantModel } from '../models/restaurant-model.js';
@@ -22,7 +22,6 @@ import {
 } from '../utils/serializers.js';
 
 const router = express.Router();
-const upload = multer({ dest: 'backend/uploads/' });
 
 router.use(requireAuth, requireRoles('VENDOR'));
 

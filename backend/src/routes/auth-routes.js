@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
 import express from 'express';
-import multer from 'multer';
 
 import { isDemoModeEnabled } from '../config/db.js';
+import { upload } from '../config/uploads.js';
 import { ADMIN_FAMILY, USER_ROLES } from '../constants/auth-constants.js';
 import { requireAuth } from '../middleware/auth-middleware.js';
 import { AdminNotificationModel } from '../models/admin-notification-model.js';
@@ -17,7 +17,6 @@ import { signAuthToken } from '../services/jwt-service.js';
 import { sendRegistrationOtp } from '../services/otp-provider-service.js';
 import { serializeUser } from '../utils/serializers.js';
 
-const upload = multer({ dest: 'backend/uploads/' });
 const router = express.Router();
 const REGISTRATION_ROLES = ['CUSTOMER', 'VENDOR', 'DELIVERY_PARTNER'];
 
