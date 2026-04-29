@@ -120,6 +120,7 @@ router.post('/register', upload.single('document'), async (req, res) => {
       user: serializeUser(user),
     });
   } catch (error) {
+    console.error('Registration failed', error);
     return res.status(500).json({ message: 'Registration failed.' });
   }
 });
@@ -177,6 +178,7 @@ router.post('/login', async (req, res) => {
       user: serializeUser(user),
     });
   } catch (error) {
+    console.error('Login failed', error);
     return res.status(500).json({ message: 'Login failed.' });
   }
 });
@@ -215,6 +217,7 @@ router.post('/phone/send-otp', async (req, res) => {
       mode: delivery.mode,
     });
   } catch (error) {
+    console.error('Send OTP failed', error);
     return res.status(500).json({
       message: error instanceof Error ? error.message : 'Could not send OTP.',
     });
