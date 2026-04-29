@@ -5,6 +5,7 @@
   "outputDirectory": "build/web",
   "cleanUrls": true,
   "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/[...route]" },
     { "source": "/", "destination": "/index.html" },
     { "source": "/:path((?!api/).*)", "destination": "/index.html" }
   ]
