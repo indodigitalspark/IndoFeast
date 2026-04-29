@@ -339,10 +339,20 @@ class FirebaseAuthDataSource {
       return data['message'] as String;
     }
 
+    if (data is String && data.trim().isNotEmpty) {
+      return data.trim();
+    }
+
     if (error.type == DioExceptionType.connectionError ||
         error.type == DioExceptionType.connectionTimeout) {
       return 'Cannot reach the IndoFeast backend at ${AppConfig.apiBaseUrl}. '
           'Start it with "cd backend && npm run dev" and try again.';
+    }
+
+    final statusCode = error.response?.statusCode;
+    if (statusCode != null) {
+      return 'Login request failed with status $statusCode. '
+          'Check the backend deployment logs and API route configuration.';
     }
 
     return 'Request failed. Check the MongoDB-backed API and try again.';
