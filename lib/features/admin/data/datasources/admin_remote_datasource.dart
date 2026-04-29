@@ -168,6 +168,13 @@ class AdminRemoteDataSource {
     );
   }
 
+  Future<void> updateOtpSettings(AdminOtpSettings otpSettings) async {
+    await ApiClient.instance.patch<Map<String, dynamic>>(
+      '/admin/otp-settings',
+      data: {'otpSettings': otpSettings.toMap()},
+    );
+  }
+
   Future<void> broadcastNotification({
     required String title,
     required String body,

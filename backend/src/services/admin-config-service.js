@@ -111,6 +111,20 @@ export async function getOrCreateAdminConfig() {
         },
       ],
     },
+    otpSettings: {
+      enabled: false,
+      providerName: 'Custom SMS API',
+      apiUrl: '',
+      httpMethod: 'POST',
+      authToken: '',
+      senderId: 'INDOFEAST',
+      messageTemplate:
+        'Your IndoFeast OTP is {{OTP}}. It expires in {{EXPIRY_MINUTES}} minutes.',
+      requestHeaders: '{"Content-Type":"application/json"}',
+      requestBodyTemplate:
+        '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+      successStatusCodes: [200, 201, 202],
+    },
   });
 
   return config;

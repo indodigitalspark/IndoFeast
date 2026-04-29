@@ -50,6 +50,45 @@ const websiteSettingsSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const otpSettingsSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    providerName: {
+      type: String,
+      trim: true,
+      default: 'Custom SMS API',
+    },
+    apiUrl: { type: String, trim: true, default: '' },
+    httpMethod: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: 'POST',
+    },
+    authToken: { type: String, trim: true, default: '' },
+    senderId: { type: String, trim: true, default: 'INDOFEAST' },
+    messageTemplate: {
+      type: String,
+      trim: true,
+      default:
+        'Your IndoFeast OTP is {{OTP}}. It expires in {{EXPIRY_MINUTES}} minutes.',
+    },
+    requestHeaders: {
+      type: String,
+      trim: true,
+      default: '{"Content-Type":"application/json"}',
+    },
+    requestBodyTemplate: {
+      type: String,
+      trim: true,
+      default:
+        '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+    },
+    successStatusCodes: { type: [Number], default: [200, 201, 202] },
+  },
+  { _id: false },
+);
+
 const adminConfigSchema = new mongoose.Schema(
   {
     key: { type: String, required: true, unique: true, default: 'platform' },
@@ -58,6 +97,7 @@ const adminConfigSchema = new mongoose.Schema(
     managedCategories: { type: [managedCategorySchema], default: [] },
     marketingBanners: { type: [marketingBannerSchema], default: [] },
     websiteSettings: { type: websiteSettingsSchema, default: () => ({}) },
+    otpSettings: { type: otpSettingsSchema, default: () => ({}) },
   },
   { timestamps: true },
 );

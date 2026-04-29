@@ -2140,6 +2140,19 @@ class _PlatformControlsSection extends StatelessWidget {
           actionLabel: '${data.config.roleDefinitions.length} role definitions',
           onTap: () => _showRolesDialog(context, data.config),
         ),
+      if (currentUser?.role == UserRole.superAdmin)
+        _InlineControlCard(
+          title: 'OTP SMS API',
+          subtitle:
+              'Control the phone verification provider, request payload, and delivery mode for signup OTP messages.',
+          actionLabel: data.config.otpSettings?.enabled == true
+              ? data.config.otpSettings?.providerName ?? 'Enabled'
+              : 'Preview fallback',
+          onTap: () => _showOtpSettingsDialog(
+            context,
+            data.config.otpSettings ?? _defaultOtpSettings(),
+          ),
+        ),
       if (currentUser?.hasPermission('categories:manage') ?? false)
         _InlineControlCard(
           title: 'Manage categories',
@@ -3856,6 +3869,221 @@ class _EditableWebsiteQrLink {
   final TextEditingController descriptionController;
   final TextEditingController urlController;
   bool isActive;
+}
+
+AdminOtpSettings _defaultOtpSettings() {
+  return const AdminOtpSettings(
+    enabled: false,
+    providerName: 'Custom SMS API',
+    apiUrl: '',
+    httpMethod: 'POST',
+    authToken: '',
+    hasAuthToken: false,
+    senderId: 'INDOFEAST',
+    messageTemplate:
+        'Your IndoFeast OTP is {{OTP}}. It expires in {{EXPIRY_MINUTES}} minutes.',
+    requestHeaders: '{"Content-Type":"application/json"}',
+    requestBodyTemplate:
+        '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+    successStatusCodes: [200, 201, 202],
+  );
+}
+
+Future<void> _showOtpSettingsDialog(
+  BuildContext context,
+  AdminOtpSettings otpSettings,
+) async {
+  final providerNameController = TextEditingController(
+    text: otpSettings.providerName,
+  );
+  final apiUrlController = TextEditingController(text: otpSettings.apiUrl);
+  final authTokenController = TextEditingController(
+    text: otpSettings.authToken,
+  );
+  final senderIdController = TextEditingController(text: otpSettings.senderId);
+  final messageTemplateController = TextEditingController(
+    text: otpSettings.messageTemplate,
+  );
+  final headersController = TextEditingController(
+    text: otpSettings.requestHeaders,
+  );
+  final bodyTemplateController = TextEditingController(
+    text: otpSettings.requestBodyTemplate,
+  );
+  final successCodesController = TextEditingController(
+    text: otpSettings.successStatusCodes.join(', '),
+  );
+  var enabled = otpSettings.enabled;
+  var method = otpSettings.httpMethod.toUpperCase();
+  var keepExistingToken =
+      otpSettings.authToken.isEmpty && otpSettings.hasAuthToken;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            scrollable: true,
+            title: const Text('OTP SMS API'),
+            content: SizedBox(
+              width: 760,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: enabled,
+                      title: const Text('Enable live OTP delivery'),
+                      subtitle: Text(
+                        enabled
+                            ? 'Signup OTPs will be sent using the configured SMS API.'
+                            : 'Signup OTPs stay in preview mode for testing.',
+                      ),
+                      onChanged: (value) => setState(() => enabled = value),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: providerNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Provider Name',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    DropdownButtonFormField<String>(
+                      initialValue: method,
+                      decoration: const InputDecoration(
+                        labelText: 'HTTP Method',
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'POST', child: Text('POST')),
+                        DropdownMenuItem(value: 'PUT', child: Text('PUT')),
+                        DropdownMenuItem(value: 'PATCH', child: Text('PATCH')),
+                        DropdownMenuItem(value: 'GET', child: Text('GET')),
+                      ],
+                      onChanged: (value) => setState(() => method = value!),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: apiUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'API URL',
+                        hintText: 'https://api.example.com/send-sms',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: senderIdController,
+                      decoration: const InputDecoration(labelText: 'Sender ID'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: authTokenController,
+                      decoration: InputDecoration(
+                        labelText: 'Bearer Token',
+                        hintText: otpSettings.hasAuthToken
+                            ? 'Leave blank to keep the saved token'
+                            : 'Optional',
+                      ),
+                      obscureText: true,
+                    ),
+                    if (otpSettings.hasAuthToken) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: keepExistingToken,
+                        title: const Text(
+                          'Keep saved token when field is blank',
+                        ),
+                        onChanged: (value) =>
+                            setState(() => keepExistingToken = value),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: messageTemplateController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Message Template',
+                        hintText:
+                            'Use {{OTP}}, {{PHONE_NUMBER}}, {{EXPIRY_MINUTES}}, {{ROLE}}',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: headersController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Request Headers JSON',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: bodyTemplateController,
+                      maxLines: 6,
+                      decoration: const InputDecoration(
+                        labelText: 'Request Body Template JSON',
+                        hintText:
+                            'Use {{MESSAGE}}, {{OTP}}, {{PHONE_NUMBER}}, {{SENDER_ID}}',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
+                      controller: successCodesController,
+                      decoration: const InputDecoration(
+                        labelText: 'Success Status Codes',
+                        hintText: '200, 201, 202',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final authTokenText = authTokenController.text.trim();
+                  final updated = AdminOtpSettings(
+                    enabled: enabled,
+                    providerName: providerNameController.text.trim(),
+                    apiUrl: apiUrlController.text.trim(),
+                    httpMethod: method,
+                    authToken: authTokenText.isEmpty && keepExistingToken
+                        ? otpSettings.authToken
+                        : authTokenText,
+                    hasAuthToken:
+                        authTokenText.isNotEmpty || otpSettings.hasAuthToken,
+                    senderId: senderIdController.text.trim(),
+                    messageTemplate: messageTemplateController.text.trim(),
+                    requestHeaders: headersController.text.trim(),
+                    requestBodyTemplate: bodyTemplateController.text.trim(),
+                    successStatusCodes: successCodesController.text
+                        .split(',')
+                        .map((item) => int.tryParse(item.trim()))
+                        .whereType<int>()
+                        .toList(growable: false),
+                  );
+                  await ProviderScope.containerOf(context)
+                      .read(adminDashboardControllerProvider.notifier)
+                      .updateOtpSettings(updated);
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                },
+                child: const Text('Save OTP settings'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
 }
 
 Future<void> _showBroadcastDialog(BuildContext context) async {

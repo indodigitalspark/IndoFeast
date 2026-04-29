@@ -14,6 +14,7 @@ import {
 } from '../services/demo-auth-service.js';
 import { getOrCreateAdminConfig } from '../services/admin-config-service.js';
 import { signAuthToken } from '../services/jwt-service.js';
+import { sendRegistrationOtp } from '../services/otp-provider-service.js';
 import { serializeUser } from '../utils/serializers.js';
 
 const upload = multer({ dest: 'backend/uploads/' });
@@ -195,17 +196,29 @@ router.post('/phone/send-otp', async (req, res) => {
     }
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const expiryMinutes = 5;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
     await OtpSessionModel.deleteMany({ phoneNumber, role });
     await OtpSessionModel.create({ phoneNumber, role, code, expiresAt });
 
+    const delivery = await sendRegistrationOtp({
+      phoneNumber,
+      role,
+      code,
+      expiryMinutes,
+    });
+
     return res.json({
-      message: `OTP sent to ${phoneNumber}.`,
-      otpPreview: code,
+      message: delivery.message,
+      otpPreview: delivery.otpPreview || null,
+      providerName: delivery.providerName,
+      mode: delivery.mode,
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Could not send OTP.' });
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : 'Could not send OTP.',
+    });
   }
 });
 

@@ -225,6 +225,10 @@ class AdminDashboardController extends AsyncNotifier<AdminDashboardState> {
     await _mutate(() => _dataSource.updateWebsiteSettings(websiteSettings));
   }
 
+  Future<void> updateOtpSettings(AdminOtpSettings otpSettings) async {
+    await _mutate(() => _dataSource.updateOtpSettings(otpSettings));
+  }
+
   Future<void> resetUserPassword({
     required String userId,
     required String password,

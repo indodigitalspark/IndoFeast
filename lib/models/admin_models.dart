@@ -119,6 +119,7 @@ class AdminPlatformConfig {
     required this.managedCategories,
     required this.marketingBanners,
     required this.websiteSettings,
+    this.otpSettings,
   });
 
   final double globalCommissionRate;
@@ -126,6 +127,7 @@ class AdminPlatformConfig {
   final List<AdminCategoryModel> managedCategories;
   final List<AdminBannerModel> marketingBanners;
   final AdminWebsiteSettings websiteSettings;
+  final AdminOtpSettings? otpSettings;
 
   factory AdminPlatformConfig.fromMap(Map<String, dynamic> map) {
     return AdminPlatformConfig(
@@ -143,7 +145,77 @@ class AdminPlatformConfig {
       websiteSettings: AdminWebsiteSettings.fromMap(
         map['websiteSettings'] as Map<String, dynamic>? ?? <String, dynamic>{},
       ),
+      otpSettings: map['otpSettings'] is Map<String, dynamic>
+          ? AdminOtpSettings.fromMap(map['otpSettings'] as Map<String, dynamic>)
+          : null,
     );
+  }
+}
+
+class AdminOtpSettings {
+  const AdminOtpSettings({
+    required this.enabled,
+    required this.providerName,
+    required this.apiUrl,
+    required this.httpMethod,
+    required this.authToken,
+    required this.hasAuthToken,
+    required this.senderId,
+    required this.messageTemplate,
+    required this.requestHeaders,
+    required this.requestBodyTemplate,
+    required this.successStatusCodes,
+  });
+
+  final bool enabled;
+  final String providerName;
+  final String apiUrl;
+  final String httpMethod;
+  final String authToken;
+  final bool hasAuthToken;
+  final String senderId;
+  final String messageTemplate;
+  final String requestHeaders;
+  final String requestBodyTemplate;
+  final List<int> successStatusCodes;
+
+  factory AdminOtpSettings.fromMap(Map<String, dynamic> map) {
+    return AdminOtpSettings(
+      enabled: map['enabled'] as bool? ?? false,
+      providerName: map['providerName'] as String? ?? 'Custom SMS API',
+      apiUrl: map['apiUrl'] as String? ?? '',
+      httpMethod: map['httpMethod'] as String? ?? 'POST',
+      authToken: map['authToken'] as String? ?? '',
+      hasAuthToken: map['hasAuthToken'] as bool? ?? false,
+      senderId: map['senderId'] as String? ?? 'INDOFEAST',
+      messageTemplate:
+          map['messageTemplate'] as String? ??
+          'Your IndoFeast OTP is {{OTP}}. It expires in {{EXPIRY_MINUTES}} minutes.',
+      requestHeaders:
+          map['requestHeaders'] as String? ??
+          '{"Content-Type":"application/json"}',
+      requestBodyTemplate:
+          map['requestBodyTemplate'] as String? ??
+          '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+      successStatusCodes: List<num>.from(
+        map['successStatusCodes'] as List? ?? const [200, 201, 202],
+      ).map((item) => item.toInt()).toList(growable: false),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'enabled': enabled,
+      'providerName': providerName,
+      'apiUrl': apiUrl,
+      'httpMethod': httpMethod,
+      'authToken': authToken,
+      'senderId': senderId,
+      'messageTemplate': messageTemplate,
+      'requestHeaders': requestHeaders,
+      'requestBodyTemplate': requestBodyTemplate,
+      'successStatusCodes': successStatusCodes,
+    };
   }
 }
 

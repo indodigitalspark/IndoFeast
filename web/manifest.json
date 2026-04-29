@@ -5,7 +5,7 @@
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#FF6B00",
-    "description": "A new Flutter project.",
+    "description": "IndoFeast food ordering, vendor, delivery, and admin web app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -53,6 +53,7 @@ router.get('/dashboard', requirePermissions('dashboard:view'), async (req, res) 
   const canViewRoles = userHasPermission(req.user, 'roles:manage');
   const canViewCategories = userHasPermission(req.user, 'categories:manage');
   const canViewBanners = userHasPermission(req.user, 'banners:manage');
+  const canManageOtpSettings = req.user.role === 'SUPER_ADMIN';
 
   return res.json({
     analytics,
@@ -74,13 +75,19 @@ router.get('/dashboard', requirePermissions('dashboard:view'), async (req, res) 
       : [],
     transactions: canViewTransactions ? transactions : [],
     notifications: notifications.map(serializeNotification),
-    config: serializeAdminConfig({
-      ...config.toObject(),
-      globalCommissionRate: canViewCommission ? config.globalCommissionRate : 0.18,
-      roleDefinitions: canViewRoles ? config.roleDefinitions : [],
-      managedCategories: canViewCategories ? config.managedCategories : [],
-      marketingBanners: canViewBanners ? config.marketingBanners : [],
-    }),
+    config: serializeAdminConfig(
+      {
+        ...config.toObject(),
+        globalCommissionRate: canViewCommission ? config.globalCommissionRate : 0.18,
+        roleDefinitions: canViewRoles ? config.roleDefinitions : [],
+        managedCategories: canViewCategories ? config.managedCategories : [],
+        marketingBanners: canViewBanners ? config.marketingBanners : [],
+      },
+      {
+        includeOtpSettings: canManageOtpSettings,
+        includeSensitiveOtpFields: canManageOtpSettings,
+      },
+    ),
     report: buildReportSnapshot({ orders, restaurants, transactions, analytics }),
   });
 });
@@ -803,6 +810,79 @@ router.patch('/website-settings', async (req, res) => {
   });
 });
 
+router.patch('/otp-settings', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({
+      message: 'Only a SUPER_ADMIN can manage OTP API settings.',
+    });
+  }
+
+  const otpSettings = req.body.otpSettings || {};
+  const normalizedStatusCodes = sanitizeStatusCodes(
+    otpSettings.successStatusCodes,
+  );
+  const httpMethod =
+    String(otpSettings.httpMethod || 'POST').trim().toUpperCase() || 'POST';
+  if (!['GET', 'POST', 'PUT', 'PATCH'].includes(httpMethod)) {
+    return res.status(400).json({
+      message: 'HTTP method must be GET, POST, PUT, or PATCH.',
+    });
+  }
+
+  try {
+    ensureJsonString(
+      String(otpSettings.requestHeaders || '').trim() ||
+        '{"Content-Type":"application/json"}',
+      'Request headers',
+    );
+    ensureJsonString(
+      String(otpSettings.requestBodyTemplate || '').trim() ||
+        '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+      'Request body template',
+    );
+  } catch (error) {
+    return res.status(400).json({
+      message: error instanceof Error ? error.message : 'Invalid OTP API configuration.',
+    });
+  }
+
+  if (otpSettings.enabled === true && !String(otpSettings.apiUrl || '').trim()) {
+    return res.status(400).json({
+      message: 'API URL is required when OTP API delivery is enabled.',
+    });
+  }
+
+  const config = await getOrCreateAdminConfig();
+  config.otpSettings = {
+    enabled: otpSettings.enabled === true,
+    providerName: String(otpSettings.providerName || '').trim() || 'Custom SMS API',
+    apiUrl: String(otpSettings.apiUrl || '').trim(),
+    httpMethod,
+    authToken: String(otpSettings.authToken || '').trim(),
+    senderId: String(otpSettings.senderId || '').trim() || 'INDOFEAST',
+    messageTemplate:
+      String(otpSettings.messageTemplate || '').trim() ||
+      'Your IndoFeast OTP is {{OTP}}. It expires in {{EXPIRY_MINUTES}} minutes.',
+    requestHeaders:
+      String(otpSettings.requestHeaders || '').trim() ||
+      '{"Content-Type":"application/json"}',
+    requestBodyTemplate:
+      String(otpSettings.requestBodyTemplate || '').trim() ||
+      '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+    successStatusCodes: normalizedStatusCodes,
+  };
+
+  await config.save();
+
+  return res.json({
+    message: 'OTP API settings updated.',
+    config: serializeAdminConfig(config, {
+      includeOtpSettings: true,
+      includeSensitiveOtpFields: true,
+    }),
+  });
+});
+
 router.post(
   '/notifications/broadcast',
   requirePermissions('notifications:broadcast'),
@@ -938,7 +1018,13 @@ router.get('/notifications', async (req, res) => {
 
 export { router as adminRoutes };
 
-function serializeAdminConfig(config) {
+function serializeAdminConfig(
+  config,
+  {
+    includeOtpSettings = false,
+    includeSensitiveOtpFields = false,
+  } = {},
+) {
   return {
     globalCommissionRate: config.globalCommissionRate ?? 0.18,
     roleDefinitions: (config.roleDefinitions || []).map((item) => ({
@@ -970,6 +1056,32 @@ function serializeAdminConfig(config) {
         isActive: item.isActive ?? true,
       })),
     },
+    otpSettings: includeOtpSettings
+      ? {
+          enabled: config.otpSettings?.enabled === true,
+          providerName: config.otpSettings?.providerName || 'Custom SMS API',
+          apiUrl: config.otpSettings?.apiUrl || '',
+          httpMethod: config.otpSettings?.httpMethod || 'POST',
+          authToken: includeSensitiveOtpFields
+            ? config.otpSettings?.authToken || ''
+            : '',
+          hasAuthToken: Boolean(config.otpSettings?.authToken),
+          senderId: config.otpSettings?.senderId || 'INDOFEAST',
+          messageTemplate:
+            config.otpSettings?.messageTemplate ||
+            'Your IndoFeast OTP is {{OTP}}. It expires in {{EXPIRY_MINUTES}} minutes.',
+          requestHeaders:
+            config.otpSettings?.requestHeaders ||
+            '{"Content-Type":"application/json"}',
+          requestBodyTemplate:
+            config.otpSettings?.requestBodyTemplate ||
+            '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+          successStatusCodes:
+            config.otpSettings?.successStatusCodes?.length
+              ? config.otpSettings.successStatusCodes
+              : [200, 201, 202],
+        }
+      : null,
   };
 }
 
@@ -1109,6 +1221,26 @@ function sanitizeStringArray(value) {
     .filter(Boolean);
 }
 
+function sanitizeStatusCodes(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  const normalized = source
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item >= 100 && item <= 599);
+
+  return normalized.length > 0 ? normalized : [200, 201, 202];
+}
+
+function ensureJsonString(value, label) {
+  JSON.parse(value);
+  return value;
+}
+
 async function syncUsersWithCustomRole(key, name, permissions) {
   await UserModel.updateMany(
     { customRoleKey: key },
@@ -1161,6 +1293,16 @@ function buildDemoAdminDashboard() {
       })),
       managedCategories: demoAdminState.config.managedCategories.map((item) => ({ ...item })),
       marketingBanners: demoAdminState.config.marketingBanners.map((item) => ({ ...item })),
+      otpSettings: {
+        ...(demoAdminState.config.otpSettings || {}),
+        successStatusCodes: [
+          ...((demoAdminState.config.otpSettings || {}).successStatusCodes || [
+            200,
+            201,
+            202,
+          ]),
+        ],
+      },
     },
     report: {
       days: 30,
@@ -1440,6 +1582,20 @@ function createDemoAdminState() {
           isActive: true,
         },
       ],
+      otpSettings: {
+        enabled: false,
+        providerName: 'Custom SMS API',
+        apiUrl: '',
+        httpMethod: 'POST',
+        authToken: '',
+        senderId: 'INDOFEAST',
+        messageTemplate:
+          'Your IndoFeast OTP is {{OTP}}. It expires in {{EXPIRY_MINUTES}} minutes.',
+        requestHeaders: '{"Content-Type":"application/json"}',
+        requestBodyTemplate:
+          '{"phone":"{{PHONE_NUMBER}}","message":"{{MESSAGE}}","senderId":"{{SENDER_ID}}"}',
+        successStatusCodes: [200, 201, 202],
+      },
     },
   };
 }
