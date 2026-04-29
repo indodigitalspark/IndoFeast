@@ -15,13 +15,19 @@ export function createApp() {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const allowAnyOrigin =
+    allowedOrigins.length === 0 || allowedOrigins.includes('*');
   const corsOptions = {
     origin: (origin, callback) => {
       if (!origin) {
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(origin) || isLocalFlutterOrigin(origin)) {
+      if (
+        allowAnyOrigin ||
+        allowedOrigins.includes(origin) ||
+        isLocalFlutterOrigin(origin)
+      ) {
         return callback(null, true);
       }
 
