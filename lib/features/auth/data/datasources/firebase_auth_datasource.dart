@@ -6,7 +6,6 @@ import '../../../../core/config/app_config.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../models/admin_models.dart';
 import '../../../../models/account_status.dart';
-import '../../../../models/admin_notification.dart';
 import '../../../../models/app_user.dart';
 import '../../../../models/user_role.dart';
 import '../../../../services/api/api_client.dart';
@@ -19,9 +18,6 @@ class FirebaseAuthDataSource {
 
   Timer? _usersPoller;
   Timer? _pendingUsersPoller;
-  Timer? _notificationsPoller;
-
-  Future<void> seedDefaultAdminIfNeeded() async {}
 
   Future<AuthSession> getCurrentSession() async {
     final token = await AppStorageService.getAuthToken();
@@ -244,7 +240,7 @@ class FirebaseAuthDataSource {
     emitUsers();
     _usersPoller?.cancel();
     _usersPoller = Timer.periodic(
-      const Duration(seconds: 8),
+      const Duration(seconds: 15),
       (_) => emitUsers(),
     );
     controller.onCancel = () => _usersPoller?.cancel();
@@ -272,7 +268,7 @@ class FirebaseAuthDataSource {
     emitUsers();
     _pendingUsersPoller?.cancel();
     _pendingUsersPoller = Timer.periodic(
-      const Duration(seconds: 8),
+      const Duration(seconds: 15),
       (_) => emitUsers(),
     );
     controller.onCancel = () => _pendingUsersPoller?.cancel();
@@ -295,42 +291,6 @@ class FirebaseAuthDataSource {
     } on DioException catch (error) {
       throw AppException(_extractMessage(error));
     }
-  }
-
-  Stream<List<AdminNotification>> watchAdminNotifications() {
-    final controller = StreamController<List<AdminNotification>>.broadcast();
-
-    Future<void> emitNotifications() async {
-      try {
-        final response = await ApiClient.instance.get<Map<String, dynamic>>(
-          '/admin/notifications',
-        );
-        final items = List<Map<String, dynamic>>.from(
-          response.data?['notifications'] as List? ?? const [],
-        );
-        controller.add(
-          items
-              .map(
-                (item) => AdminNotification.fromMap(
-                  item['id'] as String? ?? '',
-                  item,
-                ),
-              )
-              .toList(growable: false),
-        );
-      } catch (_) {
-        controller.add(const <AdminNotification>[]);
-      }
-    }
-
-    emitNotifications();
-    _notificationsPoller?.cancel();
-    _notificationsPoller = Timer.periodic(
-      const Duration(seconds: 8),
-      (_) => emitNotifications(),
-    );
-    controller.onCancel = () => _notificationsPoller?.cancel();
-    return controller.stream;
   }
 
   String _extractMessage(DioException error) {

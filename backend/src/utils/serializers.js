@@ -72,8 +72,8 @@ export function serializeRestaurant(restaurant) {
       status: entry.status ?? 'PENDING',
       createdAt: entry.createdAt?.toISOString(),
     })),
-    menuItems: (restaurant.menuItems || []).map((item) => ({
-      itemId: item.itemId,
+    menuItems: (restaurant.menuItems || []).map((item, index) => ({
+      itemId: resolveMenuItemId(item, index),
       name: item.name,
       description: item.description,
       category: item.category,
@@ -98,6 +98,24 @@ export function serializeRestaurant(restaurant) {
       createdAt: review.createdAt?.toISOString(),
     })),
   };
+}
+
+function resolveMenuItemId(item, index) {
+  if (item?.itemId && String(item.itemId).trim()) {
+    return String(item.itemId).trim();
+  }
+
+  if (item?._id) {
+    return item._id.toString();
+  }
+
+  const slug = String(item?.name || `menu-item-${index + 1}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `legacy-${index + 1}-${slug || 'item'}`;
 }
 
 export function serializeCoupon(coupon) {

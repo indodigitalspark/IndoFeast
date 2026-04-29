@@ -97,7 +97,13 @@ router.get('/cart', async (req, res) => {
 });
 
 router.post('/cart/items', async (req, res) => {
-  const { restaurantId, menuItemId } = req.body;
+  const { restaurantId, menuItemId, replaceCart = false } = req.body;
+  if (!restaurantId || !menuItemId) {
+    return res.status(400).json({
+      message: 'Restaurant and menu item identifiers are required.',
+    });
+  }
+
   const restaurant = await RestaurantModel.findById(restaurantId);
   if (!restaurant) {
     return res.status(404).json({ message: 'Restaurant not found.' });
@@ -108,11 +114,11 @@ router.post('/cart/items', async (req, res) => {
     });
   }
 
-  const menuItem = restaurant.menuItems.find((item) => item.itemId === menuItemId);
-  if (!menuItem) {
+  const resolvedMenuItem = findRestaurantMenuItem(restaurant, menuItemId);
+  if (!resolvedMenuItem) {
     return res.status(404).json({ message: 'Menu item not found.' });
   }
-  if (!menuItem.isAvailable || menuItem.stock <= 0) {
+  if (!resolvedMenuItem.item.isAvailable || resolvedMenuItem.item.stock <= 0) {
     return res.status(400).json({ message: 'This item is currently out of stock.' });
   }
 
@@ -121,13 +127,21 @@ router.post('/cart/items', async (req, res) => {
     cart.items.length > 0 &&
     cart.items[0].restaurantId.toString() !== restaurantId
   ) {
-    return res.status(400).json({
-      message:
-        'Your cart already contains items from another restaurant. Remove them before adding from a new one.',
-    });
+    if (replaceCart) {
+      cart.items = [];
+      cart.couponCode = undefined;
+      cart.discount = 0;
+    } else {
+      return res.status(400).json({
+        message:
+          'Your cart already contains items from another restaurant. Remove them before adding from a new one.',
+      });
+    }
   }
   const existing = cart.items.find(
-    (item) => item.restaurantId.toString() === restaurantId && item.menuItemId === menuItemId,
+    (item) =>
+      item.restaurantId.toString() === restaurantId &&
+      item.menuItemId === resolvedMenuItem.id,
   );
 
   if (existing) {
@@ -136,9 +150,9 @@ router.post('/cart/items', async (req, res) => {
     cart.items.push({
       restaurantId: restaurant._id,
       restaurantName: restaurant.name,
-      menuItemId: menuItem.itemId,
-      name: menuItem.name,
-      price: menuItem.price,
+      menuItemId: resolvedMenuItem.id,
+      name: resolvedMenuItem.item.name,
+      price: resolvedMenuItem.item.price,
       quantity: 1,
     });
   }
@@ -251,9 +265,8 @@ router.post('/orders', async (req, res) => {
   }
 
   for (const cartItem of cart.items) {
-    const menuItem = restaurant.menuItems.find(
-      (item) => item.itemId === cartItem.menuItemId,
-    );
+    const resolvedMenuItem = findRestaurantMenuItem(restaurant, cartItem.menuItemId);
+    const menuItem = resolvedMenuItem?.item;
     if (!menuItem || !menuItem.isAvailable || menuItem.stock < cartItem.quantity) {
       return res.status(400).json({
         message: `Insufficient stock for ${cartItem.name}. Please update your cart.`,
@@ -321,9 +334,7 @@ router.post('/orders', async (req, res) => {
   }
 
   for (const cartItem of cart.items) {
-    const menuItem = restaurant.menuItems.find(
-      (item) => item.itemId === cartItem.menuItemId,
-    );
+    const menuItem = findRestaurantMenuItem(restaurant, cartItem.menuItemId)?.item;
     if (menuItem) {
       menuItem.stock -= cartItem.quantity;
       menuItem.isAvailable = menuItem.stock > 0;
@@ -534,6 +545,35 @@ router.post('/wallet/add-funds', async (req, res) => {
     user: serializeUser(req.user),
   });
 });
+
+function findRestaurantMenuItem(restaurant, menuItemId) {
+  for (const [index, item] of (restaurant.menuItems || []).entries()) {
+    const resolvedId = resolveMenuItemId(item, index);
+    if (resolvedId === String(menuItemId)) {
+      return { item, index, id: resolvedId };
+    }
+  }
+
+  return null;
+}
+
+function resolveMenuItemId(item, index) {
+  if (item?.itemId && String(item.itemId).trim()) {
+    return String(item.itemId).trim();
+  }
+
+  if (item?._id) {
+    return item._id.toString();
+  }
+
+  const slug = String(item?.name || `menu-item-${index + 1}`)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `legacy-${index + 1}-${slug || 'item'}`;
+}
 
 async function getOrCreateCart(userId) {
   let cart = await CartModel.findOne({ userId });

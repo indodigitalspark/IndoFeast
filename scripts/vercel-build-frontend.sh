@@ -15,4 +15,7 @@ flutter --version
 flutter config --enable-web
 flutter pub get
 echo "Building Flutter web with API_BASE_URL=${API_BASE_URL_VALUE}"
-flutter build web --release --dart-define=API_BASE_URL="${API_BASE_URL_VALUE}"
+flutter build web \
+  --release \
+  --dart-define=API_BASE_URL="${API_BASE_URL_VALUE}" \
+  --optimization-level=4

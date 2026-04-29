@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../../core/config/app_config.dart';
 import '../../../../models/customer_models.dart';
 import '../../../../services/api/api_client.dart';
@@ -42,13 +44,31 @@ class CustomerRemoteDataSource {
     required String restaurantId,
     required String menuItemId,
   }) async {
-    final response = await ApiClient.instance.post<Map<String, dynamic>>(
-      '/customer/cart/items',
-      data: {'restaurantId': restaurantId, 'menuItemId': menuItemId},
-    );
-    return CustomerCartModel.fromMap(
-      response.data?['cart'] as Map<String, dynamic>? ?? <String, dynamic>{},
-    );
+    try {
+      final response = await ApiClient.instance.post<Map<String, dynamic>>(
+        '/customer/cart/items',
+        data: {'restaurantId': restaurantId, 'menuItemId': menuItemId},
+      );
+      return CustomerCartModel.fromMap(
+        response.data?['cart'] as Map<String, dynamic>? ?? <String, dynamic>{},
+      );
+    } on Object catch (error) {
+      if (_shouldReplaceExistingCart(error)) {
+        final retry = await ApiClient.instance.post<Map<String, dynamic>>(
+          '/customer/cart/items',
+          data: {
+            'restaurantId': restaurantId,
+            'menuItemId': menuItemId,
+            'replaceCart': true,
+          },
+        );
+        return CustomerCartModel.fromMap(
+          retry.data?['cart'] as Map<String, dynamic>? ?? <String, dynamic>{},
+        );
+      }
+
+      rethrow;
+    }
   }
 
   Future<CustomerCartModel> updateCartItem({
@@ -176,5 +196,19 @@ class CustomerRemoteDataSource {
       '${AppConfig.apiBaseUrl}/customer/orders/stream?access_token=${Uri.encodeComponent(token ?? '')}',
     );
     return _streamClient.connect(uri.toString());
+  }
+
+  bool _shouldReplaceExistingCart(Object error) {
+    if (error is! DioException) {
+      return false;
+    }
+
+    final payload = error.response?.data;
+    final message =
+        payload is Map<String, dynamic> ? payload['message'] as String? : null;
+
+    return error.response?.statusCode == 400 &&
+        message != null &&
+        message.contains('another restaurant');
   }
 }
